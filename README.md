@@ -1,19 +1,25 @@
 # Star Citizen Discord Bot
 
-A TypeScript Discord bot for Star Citizen event signups and participant-only loot rolls.
+A TypeScript, Angular Ionic, and Discord bot project for Star Citizen event signups and participant-only loot rolls.
 
 ## What It Does
 
+- Provides an Ionic web app for creating and viewing events.
+- Supports optional event logos and event descriptions.
 - Creates event signup boards with slash commands.
 - Lets members join crew slots with Discord buttons.
 - Tracks attendance by event and posts a close report.
 - Creates loot roll boards after an event.
+- Shows event members on the loot panel and highlights members who have bid at least once.
+- Allows loot items to be removed from the web loot panel when mistakes happen.
 - Blocks loot bids from users who did not participate in the linked event.
 - Draws loot winners automatically after 24 or 48 hours, or manually with a slash command.
 
 ## Tech Stack
 
 - TypeScript
+- Angular
+- Ionic
 - Node.js
 - discord.js
 - PostgreSQL
@@ -33,7 +39,7 @@ npm run commands:deploy
 Event commands:
 
 ```text
-/event create name preset loot_timelimit starts_at report_channel custom_slots
+/event create name preset loot_timelimit starts_at description logo_url report_channel custom_slots
 /event list
 /event end event_id
 ```
@@ -87,6 +93,14 @@ http://localhost:3000/admin
 
 Paste the Discord bot token, client ID, and server ID into the setup page. The page shows whether the bot is configured or not configured, and the saved token is not displayed again.
 
+7. Open the web app:
+
+```text
+http://localhost:3000/app
+```
+
+The web app currently supports event creation, event details, event-logo display, description display, loot-panel links, loot item additions, loot item removal, and bidder highlighting for event members.
+
 ## Self-Hosted Deployment
 
 Start the stack:
@@ -101,7 +115,7 @@ Then open the private admin page:
 http://localhost:3000/admin
 ```
 
-The bot service runs database migrations on startup, launches the public invite page at `/invite`, launches the private admin page at `/admin`, and starts the Discord bot after credentials are saved. Settings are stored in a Docker volume named `settings-data`.
+The bot service runs database migrations on startup, launches the web app at `/app`, launches the public invite page at `/invite`, launches the private admin page at `/admin`, and starts the Discord bot after credentials are saved. Settings are stored in a Docker volume named `settings-data`.
 
 ## Raspberry Pi And Tailscale
 
@@ -116,7 +130,7 @@ The app redirects `/` to `/invite`. The admin page at `/admin` is blocked unless
 Recommended exposure:
 
 ```text
-Public:   /invite and /slash-commands
+Public:   /app, /invite, and /slash-commands
 Private:  /admin over Tailscale
 ```
 

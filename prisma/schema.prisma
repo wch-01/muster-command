@@ -23,7 +23,10 @@ model Event {
   channelId       String
   reportChannelId String?
   createdById     String
+  ownerWebKey     String?          @unique
   name            String
+  description     String?
+  logoUrl         String?
   startsAt        DateTime?
   endedAt         DateTime?
   lootDurationHours Int           @default(24)

@@ -42,6 +42,20 @@ const eventCommand = new SlashCommandBuilder()
       )
       .addStringOption((option) =>
         option
+          .setName("description")
+          .setDescription("Optional event description.")
+          .setRequired(false)
+          .setMaxLength(1000),
+      )
+      .addStringOption((option) =>
+        option
+          .setName("logo_url")
+          .setDescription("Optional image URL for this event.")
+          .setRequired(false)
+          .setMaxLength(500),
+      )
+      .addStringOption((option) =>
+        option
           .setName("custom_slots")
           .setDescription("For Custom: Label:capacity:Category; Fighter:3:Air wing")
           .setRequired(false)

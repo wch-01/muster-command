@@ -27,7 +27,10 @@ export const createEvent = async (input: {
   channelId: string;
   reportChannelId?: string;
   createdById: string;
+  ownerWebKey?: string;
   name: string;
+  description?: string;
+  logoUrl?: string;
   startsAt?: Date;
   lootDurationHours: number;
   preset: SlotPresetName | "custom";
@@ -48,7 +51,10 @@ export const createEvent = async (input: {
       channelId: input.channelId,
       reportChannelId: input.reportChannelId,
       createdById: input.createdById,
+      ownerWebKey: input.ownerWebKey,
       name: input.name,
+      description: input.description,
+      logoUrl: input.logoUrl,
       startsAt: input.startsAt,
       lootDurationHours: input.lootDurationHours,
       slots: {

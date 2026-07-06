@@ -73,6 +73,8 @@ const handleEventCommand = async (interaction: ChatInputCommandInteraction) => {
       reportChannelId: reportChannel?.id,
       createdById: interaction.user.id,
       name: interaction.options.getString("name", true),
+      description: interaction.options.getString("description") ?? undefined,
+      logoUrl: interaction.options.getString("logo_url") ?? undefined,
       startsAt: parseStartDate(interaction.options.getString("starts_at")),
       lootDurationHours: interaction.options.getInteger("loot_timelimit", true),
       preset,
