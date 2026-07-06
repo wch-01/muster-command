@@ -28,12 +28,13 @@ export const eventEmbed = (event: EventWithSlots) => {
     inline: true,
   }));
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle(event.name)
     .setDescription(
       [
         `Event ID: \`${event.id}\``,
         event.startsAt ? `Starts: <t:${Math.floor(event.startsAt.getTime() / 1000)}:F>` : null,
+        event.description,
         `Status: ${event.status}`,
       ]
         .filter(Boolean)
@@ -42,6 +43,12 @@ export const eventEmbed = (event: EventWithSlots) => {
     .setColor(event.status === "OPEN" ? 0x2f8f6f : 0x6b7280)
     .addFields(fields)
     .setTimestamp(event.updatedAt);
+
+  if (event.logoUrl) {
+    embed.setThumbnail(event.logoUrl);
+  }
+
+  return embed;
 };
 
 export const eventComponents = (event: EventWithSlots) => {

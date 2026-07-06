@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { extname, join, normalize } from "node:path";
 import { envConfig, isDiscordConfigured, type DiscordSettings } from "./config.js";
 import {
   registerGlobalCommands,
@@ -7,6 +8,7 @@ import {
 } from "./discord/register-commands.js";
 import { botStatus, startBot } from "./bot-runtime.js";
 import { loadSettings, saveSettings } from "./settings-store.js";
+import { handleApiRequest } from "./web-api.js";
 
 const escapeHtml = (value: string | undefined) => {
   return (value ?? "")
@@ -14,6 +16,43 @@ const escapeHtml = (value: string | undefined) => {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+};
+
+const webAppRoot = join(process.cwd(), "public", "browser");
+
+const mimeTypes: Record<string, string> = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".woff2": "font/woff2",
+};
+
+const serveWebApp = async (url: URL, response: import("node:http").ServerResponse) => {
+  if (url.pathname !== "/app" && !url.pathname.startsWith("/app/")) {
+    return false;
+  }
+
+  const requestPath = url.pathname === "/app" ? "/" : url.pathname.slice("/app".length);
+  const normalizedPath = normalize(decodeURIComponent(requestPath)).replace(/^(\.\.[/\\])+/, "");
+  let filePath = join(webAppRoot, normalizedPath);
+
+  try {
+    const fileStat = await stat(filePath);
+    if (fileStat.isDirectory()) {
+      filePath = join(filePath, "index.html");
+    }
+  } catch {
+    filePath = join(webAppRoot, "index.html");
+  }
+
+  const contentType = mimeTypes[extname(filePath)] ?? "application/octet-stream";
+  response.writeHead(200, { "content-type": contentType });
+  response.end(await readFile(filePath));
+  return true;
 };
 
 const inviteUrl = (appId: string | undefined) => {
@@ -443,6 +482,15 @@ const renderInvitePage = (settings: DiscordSettings) => {
 export const startSetupServer = async () => {
   const server = createServer(async (request, response) => {
     try {
+      const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+      if (await handleApiRequest(request, response, url)) {
+        return;
+      }
+
+      if (request.method === "GET" && (await serveWebApp(url, response))) {
+        return;
+      }
+
       if (request.method === "GET" && request.url === "/") {
         response.writeHead(302, { location: "/invite" });
         response.end();
