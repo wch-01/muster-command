@@ -9,8 +9,6 @@ CREATE TABLE "Event" (
   "createdById" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "startsAt" TIMESTAMP(3),
-  "endedAt" TIMESTAMP(3),
-  "lootDurationHours" INTEGER NOT NULL DEFAULT 24,
   "status" "EventStatus" NOT NULL DEFAULT 'OPEN',
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -43,7 +41,7 @@ CREATE TABLE "LootRaffle" (
   "channelId" TEXT NOT NULL,
   "messageId" TEXT,
   "name" TEXT NOT NULL,
-  "endsAt" TIMESTAMP(3),
+  "endsAt" TIMESTAMP(3) NOT NULL,
   "status" "RaffleStatus" NOT NULL DEFAULT 'OPEN',
   "createdById" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -53,7 +51,6 @@ CREATE TABLE "LootRaffle" (
 
 CREATE TABLE "LootItem" (
   "id" TEXT NOT NULL,
-  "eventId" TEXT NOT NULL,
   "lootRaffleId" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "winnerUserId" TEXT,
@@ -77,7 +74,6 @@ CREATE INDEX "Event_guildId_status_idx" ON "Event"("guildId", "status");
 CREATE INDEX "CrewSlot_eventId_sortOrder_idx" ON "CrewSlot"("eventId", "sortOrder");
 CREATE INDEX "CrewAssignment_crewSlotId_idx" ON "CrewAssignment"("crewSlotId");
 CREATE INDEX "LootRaffle_status_endsAt_idx" ON "LootRaffle"("status", "endsAt");
-CREATE INDEX "LootItem_eventId_idx" ON "LootItem"("eventId");
 CREATE INDEX "LootItem_lootRaffleId_sortOrder_idx" ON "LootItem"("lootRaffleId", "sortOrder");
 
 ALTER TABLE "CrewSlot" ADD CONSTRAINT "CrewSlot_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
