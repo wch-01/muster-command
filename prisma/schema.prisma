@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EventStatus {
+  OPEN
+  CLOSED
+}
+
+enum RaffleStatus {
+  OPEN
+  DRAWN
+}
+
+model Event {
+  id              String           @id @default(uuid())
+  guildId         String
+  channelId       String
+  reportChannelId String?
+  createdById     String
+  name            String
+  startsAt        DateTime?
+  endedAt         DateTime?
+  lootDurationHours Int           @default(24)
+  status          EventStatus      @default(OPEN)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  slots           CrewSlot[]
+  assignments     CrewAssignment[]
+  raffles         LootRaffle[]
+
+  @@index([guildId, status])
+}
+
+model CrewSlot {
+  id          String           @id @default(uuid())
+  eventId     String
+  category    String
+  assignmentGroup String       @default("ship")
+  label       String
+  capacity    Int
+  sortOrder   Int
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  assignments CrewAssignment[]
+
+  @@index([eventId, sortOrder])
+}
+
+model CrewAssignment {
+  id             String   @id @default(uuid())
+  eventId        String
+  crewSlotId     String
+  assignmentGroup String
+  discordUserId  String
+  discordTag     String
+  createdAt      DateTime @default(now())
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  crewSlot       CrewSlot @relation(fields: [crewSlotId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, discordUserId, assignmentGroup])
+  @@index([crewSlotId])
+}
+
+model LootRaffle {
+  id          String       @id @default(uuid())
+  eventId     String
+  channelId   String
+  messageId   String?
+  name        String
+  endsAt      DateTime?
+  status      RaffleStatus @default(OPEN)
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items       LootItem[]
+
+  @@index([status, endsAt])
+}
+
+model LootItem {
+  id             String    @id @default(uuid())
+  eventId        String
+  lootRaffleId   String
+  name           String
+  winnerUserId   String?
+  winnerTag      String?
+  sortOrder      Int
+  raffle         LootRaffle @relation(fields: [lootRaffleId], references: [id], onDelete: Cascade)
+  bids           LootBid[]
+
+  @@index([eventId])
+  @@index([lootRaffleId, sortOrder])
+}
+
+model LootBid {
+  id            String   @id @default(uuid())
+  lootItemId    String
+  discordUserId String
+  discordTag    String
+  createdAt     DateTime @default(now())
+  item          LootItem @relation(fields: [lootItemId], references: [id], onDelete: Cascade)
+
+  @@unique([lootItemId, discordUserId])
+}
