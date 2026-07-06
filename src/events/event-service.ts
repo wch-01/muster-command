@@ -82,24 +82,12 @@ export const endEvent = async (eventId: string) => {
       include: eventInclude,
     });
 
-    const updatedLootPools = await tx.lootRaffle.updateMany({
+    await tx.lootRaffle.updateMany({
       where: { eventId },
       data: {
         endsAt: new Date(endedAt.getTime() + event.lootDurationHours * 60 * 60 * 1000),
       },
     });
-
-    if (updatedLootPools.count === 0) {
-      await tx.lootRaffle.create({
-        data: {
-          eventId,
-          channelId: event.channelId,
-          createdById: event.createdById,
-          name: `Loot pool: ${event.name}`,
-          endsAt: new Date(endedAt.getTime() + event.lootDurationHours * 60 * 60 * 1000),
-        },
-      });
-    }
 
     return event;
   });
