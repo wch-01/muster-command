@@ -33,30 +33,14 @@ export const getRaffleByEventId = (eventId: string) => {
 
 export const addLootItems = async (eventId: string, items: string[]) => {
   return prisma.$transaction(async (tx) => {
-    let raffle = await tx.lootRaffle.findFirst({
+    const raffle = await tx.lootRaffle.findFirst({
       where: { eventId },
       orderBy: { createdAt: "asc" },
       include: lootInclude,
     });
 
     if (!raffle) {
-      const event = await tx.event.findUnique({ where: { id: eventId } });
-      if (!event) {
-        return null;
-      }
-
-      raffle = await tx.lootRaffle.create({
-        data: {
-          eventId,
-          channelId: event.channelId,
-          createdById: event.createdById,
-          name: `Loot pool: ${event.name}`,
-          endsAt: event.endedAt
-            ? new Date(event.endedAt.getTime() + event.lootDurationHours * 60 * 60 * 1000)
-            : undefined,
-        },
-        include: lootInclude,
-      });
+      return null;
     }
 
     if (raffle.status !== "OPEN") {
