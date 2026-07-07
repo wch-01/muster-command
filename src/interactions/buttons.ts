@@ -23,6 +23,24 @@ const handleEventJoin = async (interaction: ButtonInteraction, slotId: string) =
     return;
   }
 
+  if (slot.assignmentGroup === "extra") {
+    const regularSlots = await prisma.crewSlot.findMany({
+      where: {
+        eventId: slot.eventId,
+        assignmentGroup: { not: "extra" },
+      },
+      include: { assignments: true },
+    });
+    const regularSlotsFull =
+      regularSlots.length > 0 &&
+      regularSlots.every((regularSlot) => regularSlot.assignments.length >= regularSlot.capacity);
+
+    if (!regularSlotsFull) {
+      await interaction.reply({ content: "Extra crew opens after the listed roles are full.", ephemeral: true });
+      return;
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.crewAssignment.deleteMany({
       where: {

@@ -6,9 +6,25 @@ import {
   registerGlobalCommands,
   registerTestGuildCommands,
 } from "./discord/register-commands.js";
-import { botStatus, startBot } from "./bot-runtime.js";
+import { botGuilds, botStatus, startBot } from "./bot-runtime.js";
 import { loadSettings, saveSettings } from "./settings-store.js";
 import { handleApiRequest } from "./web-api.js";
+import { addEventStreamClient } from "./event-stream.js";
+import {
+  authConfig,
+  beginDiscordLogin,
+  completeDiscordLogin,
+  getSession,
+  getSessionUser,
+  isAdminUser,
+  isLoginConfigured,
+  logout,
+  renderLoginPage,
+  requireAuthenticatedApiUser,
+  requireAuthenticatedUser,
+  setActiveGuild,
+  type AuthenticatedUser,
+} from "./auth.js";
 
 const escapeHtml = (value: string | undefined) => {
   return (value ?? "")
@@ -31,7 +47,11 @@ const mimeTypes: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-const serveWebApp = async (url: URL, response: import("node:http").ServerResponse) => {
+const serveWebApp = async (
+  url: URL,
+  response: import("node:http").ServerResponse,
+  sessionData?: unknown,
+) => {
   if (url.pathname !== "/app" && !url.pathname.startsWith("/app/")) {
     return false;
   }
@@ -50,8 +70,15 @@ const serveWebApp = async (url: URL, response: import("node:http").ServerRespons
   }
 
   const contentType = mimeTypes[extname(filePath)] ?? "application/octet-stream";
+  let content = await readFile(filePath);
+  if (contentType.startsWith("text/html") && sessionData) {
+    const html = content.toString("utf8");
+    const script = `<script>window.__STARBOT_SESSION__=${JSON.stringify(sessionData).replaceAll("</script", "<\\/script")};</script>`;
+    content = Buffer.from(html.replace("</head>", `${script}</head>`), "utf8");
+  }
+
   response.writeHead(200, { "content-type": contentType });
-  response.end(await readFile(filePath));
+  response.end(content);
   return true;
 };
 
@@ -103,40 +130,127 @@ const isAdminRequestAllowed = (request: import("node:http").IncomingMessage) => 
   return allowedHosts.includes(host);
 };
 
-const requireAdminAccess = (request: import("node:http").IncomingMessage) => {
-  if (isAdminRequestAllowed(request)) {
+const canSeeSuperAdminLink = (
+  request: import("node:http").IncomingMessage,
+  settings: DiscordSettings,
+  user: AuthenticatedUser | undefined,
+) => {
+  const adminUserIds = authConfig(settings).adminUserIds;
+  return isAdminUser(settings, user) || (!adminUserIds.length && isAdminRequestAllowed(request));
+};
+
+const availableServersForUser = (user: AuthenticatedUser | undefined) => {
+  const installed = botGuilds();
+  const userGuilds = user?.guilds ?? [];
+  const userGuildIds = new Set(userGuilds.map((guild) => guild.id));
+  return installed.filter((guild) => userGuildIds.has(guild.id));
+};
+
+const activeServerForRequest = (request: import("node:http").IncomingMessage, user: AuthenticatedUser) => {
+  const servers = availableServersForUser(user);
+  const session = getSession(request);
+  const active =
+    servers.find((server) => server.id === session?.activeGuildId) ?? servers[0] ?? undefined;
+  if (active && session?.activeGuildId !== active.id) {
+    setActiveGuild(request, active.id);
+  }
+
+  return { active, servers };
+};
+
+const sessionPayload = (
+  request: import("node:http").IncomingMessage,
+  settings: DiscordSettings,
+  user: AuthenticatedUser,
+) => {
+  const { active, servers } = activeServerForRequest(request, user);
+  return {
+    user: {
+      id: user.id,
+      username: user.username,
+      globalName: user.globalName,
+      avatar: user.avatar,
+    },
+    isSuperAdmin: isAdminUser(settings, user),
+    activeServer: active,
+    servers,
+    requiresServerSetup: servers.length === 0,
+    requiresGuildReconnect: !Array.isArray(user.guilds),
+  };
+};
+
+const requireAdminAccess = (
+  request: import("node:http").IncomingMessage,
+  settings: DiscordSettings,
+  user: AuthenticatedUser | undefined,
+) => {
+  const adminUserIds = authConfig(settings).adminUserIds;
+  if (adminUserIds.length && isAdminUser(settings, user)) {
     return;
+  }
+
+  if (!adminUserIds.length && isAdminRequestAllowed(request)) {
+    return;
+  }
+
+  if (adminUserIds.length) {
+    throw new Error("Admin access is only available to the configured Discord admin user.");
   }
 
   const host = request.headers.host ?? "unknown host";
   throw new Error(`Admin access is not allowed from ${host}. Use localhost or Tailscale.`);
 };
 
-const renderPage = (settings: DiscordSettings, notice?: string) => {
-  const configured = isDiscordConfigured(settings);
-  const status = botStatus(settings);
-  const badge = configured ? "Configured" : "Not configured";
-  const badgeClass = configured ? "ok" : "warn";
-  const connection = status.connected ? `Connected as ${status.userTag}` : "Not connected";
-  const installedServers = status.connected
-    ? `${status.guildCount} installed server${status.guildCount === 1 ? "" : "s"}`
-    : "Installed server count unavailable";
-  const guildBadge =
-    status.inConfiguredGuild === undefined
-      ? undefined
-      : status.inConfiguredGuild
-        ? "In selected server"
-        : "Not in selected server";
-  const guildBadgeClass = status.inConfiguredGuild ? "ok" : "warn";
-  const generatedInviteUrl = inviteUrl(settings.discordClientId);
+const renderTopMenu = (
+  active: "app" | "invite" | "commands" | "admin" | "super-admin",
+  settings: DiscordSettings,
+  user: AuthenticatedUser | undefined,
+  showSuperAdmin: boolean,
+  activeServer?: { id: string; name: string },
+  servers: Array<{ id: string; name: string }> = [],
+) => {
+  const item = (href: string, label: string, key: typeof active) =>
+    `<a class="${active === key ? "active" : ""}" href="${href}">${label}</a>`;
 
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Star Citizen Bot Setup</title>
-    <style>
+  return `<header class="top-menu">
+    <a class="brand" href="/app/active-events">Star Citizen Events</a>
+    <nav aria-label="Primary navigation">
+      <div class="menu-group">
+        <button type="button">Events</button>
+        <div class="menu-dropdown">
+          <a href="/app/active-events">Active Events</a>
+          <a href="/app/events">Create Event</a>
+          <a href="/app/past-events">Past Events</a>
+        </div>
+      </div>
+      <a href="/app/loot">Loot</a>
+      ${item("/invite", "Invite", "invite")}
+      ${item("/slash-commands", "Commands", "commands")}
+      ${item("/admin", "Admin", "admin")}
+      ${showSuperAdmin ? item("/super-admin", "Super Admin", "super-admin") : ""}
+    </nav>
+    <div class="user-menu">
+      ${
+        `<form class="server-select" method="post" action="/active-server">
+                <label for="activeGuildId">Active Server</label>
+                <select id="activeGuildId" name="guildId" onchange="this.form.submit()">
+                  ${servers
+                    .map(
+                      (server) =>
+                        `<option value="${escapeHtml(server.id)}" ${server.id === activeServer?.id ? "selected" : ""}>${escapeHtml(server.name)}</option>`,
+                    )
+                    .join("")}
+                  ${servers.length ? "" : `<option value="">No shared server</option>`}
+                </select>
+              </form>`
+      }
+      ${user ? `<span>${escapeHtml(user.globalName ?? user.username)}</span>` : ""}
+      <a href="/logout">Log out</a>
+    </div>
+  </header>`;
+};
+
+const renderPageStyles = () => `<style>
       :root {
         color-scheme: light;
         font-family: Arial, sans-serif;
@@ -146,9 +260,109 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
       body {
         margin: 0;
         min-height: 100vh;
+        background: #f4f6f8;
+      }
+      .top-menu {
+        min-height: 56px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 0 18px;
+        background: #ffffff;
+        border-bottom: 1px solid #d7dde4;
+        box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
+      }
+      .brand {
+        color: #17202a;
+        font-size: 18px;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      nav {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        flex: 1;
+        flex-wrap: wrap;
+      }
+      nav a,
+      .user-menu a,
+      .menu-group > button {
+        border-radius: 6px;
+        border: 0;
+        background: transparent;
+        color: #334155;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        padding: 8px 10px;
+        text-decoration: none;
+      }
+      nav a.active {
+        color: #ffffff;
+        background: #1f6feb;
+      }
+      .menu-group {
+        position: relative;
+      }
+      .menu-group > button {
+        display: block;
+      }
+      .menu-group:hover > button,
+      .menu-group:focus-within > button {
+        color: #ffffff;
+        background: #1f6feb;
+      }
+      .menu-dropdown {
+        display: none;
+        position: absolute;
+        z-index: 10;
+        top: 100%;
+        left: 0;
+        min-width: 170px;
+        padding: 6px;
+        background: #ffffff;
+        border: 1px solid #d7dde4;
+        border-radius: 8px;
+        box-shadow: 0 12px 30px rgba(16, 24, 40, 0.12);
+      }
+      .menu-dropdown a {
+        display: block;
+      }
+      .menu-group:hover .menu-dropdown,
+      .menu-group:focus-within .menu-dropdown {
+        display: block;
+      }
+      .user-menu {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #64748b;
+        font-size: 14px;
+      }
+      .user-menu form {
+        margin: 0;
+      }
+      .server-select {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .server-select label {
+        color: #475569;
+        font-weight: 700;
+      }
+      .user-menu select {
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 7px 8px;
+        font: inherit;
+      }
+      .page-wrap {
         display: grid;
         place-items: start center;
-        padding: 48px 16px;
+        padding: 32px 16px 48px;
       }
       main {
         width: min(720px, 100%);
@@ -161,6 +375,14 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
       h1 {
         margin: 0 0 8px;
         font-size: 28px;
+      }
+      h2 {
+        margin: 24px 0 10px;
+        font-size: 20px;
+      }
+      h3 {
+        margin: 18px 0 8px;
+        font-size: 16px;
       }
       .status {
         display: flex;
@@ -218,7 +440,8 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
         padding: 11px 12px;
         font: inherit;
       }
-      .hint {
+      .hint,
+      .muted {
         margin: 6px 0 0;
         color: #64748b;
         font-size: 14px;
@@ -237,9 +460,7 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
         gap: 14px;
         flex-wrap: wrap;
       }
-      .secondary {
-        background: #475569;
-      }
+      .button,
       button {
         border: 0;
         border-radius: 6px;
@@ -249,6 +470,11 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
         color: #ffffff;
         background: #2563eb;
         cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .secondary {
+        background: #475569;
       }
       .checkbox {
         display: flex;
@@ -257,54 +483,100 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
         font-weight: 400;
         margin: 0;
       }
-      .invite {
+      .invite,
+      .panel {
         margin-top: 24px;
         padding: 14px;
         border: 1px solid #bfdbfe;
         border-radius: 8px;
         background: #eff6ff;
       }
-      .invite a {
+      .invite a,
+      .quick-links a,
+      main a {
         color: #1d4ed8;
         font-weight: 700;
       }
       .quick-links {
         margin-top: 18px;
       }
-      .quick-links a {
-        color: #1d4ed8;
-        font-weight: 700;
-      }
       .help {
         margin-top: 28px;
         border-top: 1px solid #e2e8f0;
         padding-top: 22px;
       }
-      .help h2 {
-        margin: 0 0 10px;
-        font-size: 18px;
-      }
-      .help h3 {
-        margin: 18px 0 8px;
-        font-size: 15px;
-      }
-      .help ul {
+      ul {
         margin: 8px 0 0;
         padding-left: 22px;
       }
-      .help li {
+      li {
         margin: 6px 0;
       }
-      code {
+      code,
+      pre {
         background: #f1f5f9;
         border-radius: 4px;
+      }
+      code {
         padding: 2px 5px;
       }
-    </style>
+      pre {
+        overflow-x: auto;
+        padding: 12px;
+      }
+      @media (max-width: 720px) {
+        .top-menu {
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 12px;
+        }
+        .user-menu {
+          width: 100%;
+          justify-content: space-between;
+        }
+      }
+    </style>`;
+
+const renderSuperAdminPage = (
+  settings: DiscordSettings,
+  notice?: string,
+  user?: AuthenticatedUser,
+  showSuperAdmin = true,
+  activeServer?: { id: string; name: string },
+  servers: Array<{ id: string; name: string }> = [],
+) => {
+  const configured = isDiscordConfigured(settings);
+  const loginConfigured = isLoginConfigured(settings);
+  const status = botStatus(settings);
+  const badge = configured ? "Configured" : "Not configured";
+  const badgeClass = configured ? "ok" : "warn";
+  const connection = status.connected ? `Connected as ${status.userTag}` : "Not connected";
+  const installedServers = status.connected
+    ? `${status.guildCount} installed server${status.guildCount === 1 ? "" : "s"}`
+    : "Installed server count unavailable";
+  const guildBadge =
+    status.inConfiguredGuild === undefined
+      ? undefined
+      : status.inConfiguredGuild
+        ? "In selected server"
+        : "Not in selected server";
+  const guildBadgeClass = status.inConfiguredGuild ? "ok" : "warn";
+  const generatedInviteUrl = inviteUrl(settings.discordClientId);
+  const adminIdsConfigured = authConfig(settings).adminUserIds.length > 0;
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Super Admin</title>
+    ${renderPageStyles()}
   </head>
   <body>
+    ${renderTopMenu("super-admin", settings, user, showSuperAdmin, activeServer, servers)}
+    <div class="page-wrap">
     <main>
-      <h1>Star Citizen Bot Setup</h1>
+      <h1>Super Admin</h1>
       ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
       <div class="status">
         <span class="badge ${badgeClass}">${badge}</span>
@@ -314,20 +586,31 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
       <div class="stats">
         <div class="stat"><strong>Installed Servers</strong>${escapeHtml(installedServers)}</div>
         <div class="stat"><strong>Command Mode</strong>Test server for fast updates, global for public servers</div>
-        <div class="stat"><strong>Public Invite</strong>${generatedInviteUrl ? `<a href="/invite">Open invite page</a>` : "Save App ID first"}</div>
+        <div class="stat"><strong>Public Invite</strong>${generatedInviteUrl ? `<a href="/invite">Open invite page</a>` : "Save Application ID first"}</div>
+        <div class="stat"><strong>Discord Login</strong>${loginConfigured ? "Configured" : "Needs Client Secret"}</div>
+        <div class="stat"><strong>Signed In</strong>${user ? escapeHtml(user.globalName ?? user.username) : "Bootstrap mode"}</div>
+        <div class="stat"><strong>Admin Lock</strong>${adminIdsConfigured ? "Discord user ID required" : "Local/Tailscale bootstrap"}</div>
       </div>
       <form method="post" action="/settings">
+        <label for="discordClientId">Application ID</label>
+        <input id="discordClientId" name="discordClientId" type="text" value="${escapeHtml(settings.discordClientId)}" autocomplete="off" />
+        <p class="hint">Developer Portal path: your app -> General Information -> Application ID.</p>
+
+        <label for="discordClientSecret">Client secret</label>
+        <input id="discordClientSecret" name="discordClientSecret" type="password" autocomplete="off" placeholder="${settings.discordClientSecret ? "Client secret saved - leave blank to keep it" : "Paste OAuth2 client secret"}" />
+        <p class="hint">Developer Portal path: your app -> OAuth2 -> General -> Client Secret. Add <code>${escapeHtml("http://localhost:3000/auth/discord/callback")}</code> as a redirect while testing locally.</p>
+
         <label for="discordToken">Bot token</label>
         <input id="discordToken" name="discordToken" type="password" autocomplete="off" placeholder="${settings.discordToken ? "Token saved - leave blank to keep it" : "Paste bot token"}" />
         <p class="hint">Developer Portal path: your app -> Bot -> Token -> Reset Token or View Token. The saved token is never shown again.</p>
 
-        <label for="discordClientId">App ID</label>
-        <input id="discordClientId" name="discordClientId" type="text" value="${escapeHtml(settings.discordClientId)}" autocomplete="off" />
-        <p class="hint">Developer Portal path: your app -> General Information -> App ID. This is also called the client ID in bot code.</p>
-
         <label for="discordGuildId">Discord server ID</label>
         <input id="discordGuildId" name="discordGuildId" type="text" value="${escapeHtml(settings.discordGuildId)}" autocomplete="off" />
-        <p class="hint">Discord path: enable Developer Mode, then right-click your server icon -> Copy Server ID.</p>
+        <p class="hint">Discord path: enable Developer Mode, left click your server icon, then use Copy Server ID at the end of the menu.</p>
+
+        <label for="adminDiscordUserIds">Admin Discord user ID</label>
+        <input id="adminDiscordUserIds" name="adminDiscordUserIds" type="text" value="${escapeHtml(settings.adminDiscordUserIds)}" autocomplete="off" />
+        <p class="hint">Discord path: enable Developer Mode, left click your user profile, then use Copy User ID at the end of the menu. Separate multiple admin IDs with commas.</p>
 
         <div class="actions">
           <button type="submit">Save settings</button>
@@ -354,7 +637,7 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
             </section>`
           : `<section class="invite" aria-label="Invite bot">
               <strong>Bot not in your server yet?</strong>
-              <p>Save your App ID first, then this page will show an invite link.</p>
+              <p>Save your Application ID first, then this page will show an invite link.</p>
             </section>`
       }
       <p class="quick-links"><a href="/invite" target="_blank" rel="noreferrer">Open public invite page</a> | <a href="/slash-commands" target="_blank" rel="noreferrer">Open slash command reference</a></p>
@@ -362,7 +645,7 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
         <h2>Discord Developer Portal fields</h2>
         <ul>
           <li><strong>Bot token:</strong> your app -> <code>Bot</code> -> <code>Token</code>. Keep this private.</li>
-          <li><strong>App ID:</strong> your app -> <code>General Information</code> -> <code>App ID</code>.</li>
+          <li><strong>Application ID:</strong> your app -> <code>General Information</code> -> <code>Application ID</code>.</li>
           <li><strong>Public Key:</strong> not needed for this bot.</li>
         </ul>
 
@@ -381,11 +664,144 @@ const renderPage = (settings: DiscordSettings, notice?: string) => {
         </ul>
       </section>
     </main>
+    </div>
   </body>
 </html>`;
 };
 
-const renderInvitePage = (settings: DiscordSettings) => {
+const renderAdminPage = (
+  settings: DiscordSettings,
+  user: AuthenticatedUser | undefined,
+  showSuperAdmin: boolean,
+  activeServer?: { id: string; name: string },
+  servers: Array<{ id: string; name: string }> = [],
+) => {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin</title>
+    ${renderPageStyles()}
+  </head>
+  <body>
+    ${renderTopMenu("admin", settings, user, showSuperAdmin, activeServer, servers)}
+    <div class="page-wrap">
+      <main>
+        <h1>Admin</h1>
+        <p class="muted">Server admin controls will live here.</p>
+        <section class="panel">
+          <strong>Coming soon</strong>
+          <p>This page will let Discord server admins manage how the bot works in their server.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>`;
+};
+
+const markdownToHtml = (markdown: string) => {
+  const lines = markdown.split(/\r?\n/);
+  let html = "";
+  let inList = false;
+  let inCode = false;
+  let codeLines: string[] = [];
+
+  const closeList = () => {
+    if (inList) {
+      html += "</ul>";
+      inList = false;
+    }
+  };
+
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      if (inCode) {
+        html += `<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`;
+        codeLines = [];
+        inCode = false;
+      } else {
+        closeList();
+        inCode = true;
+      }
+      continue;
+    }
+
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+
+    if (line.startsWith("### ")) {
+      closeList();
+      html += `<h3>${escapeHtml(line.slice(4))}</h3>`;
+      continue;
+    }
+
+    if (line.startsWith("## ")) {
+      closeList();
+      html += `<h2>${escapeHtml(line.slice(3))}</h2>`;
+      continue;
+    }
+
+    if (line.startsWith("# ")) {
+      closeList();
+      html += `<h1>${escapeHtml(line.slice(2))}</h1>`;
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      if (!inList) {
+        html += "<ul>";
+        inList = true;
+      }
+      html += `<li>${escapeHtml(line.slice(2))}</li>`;
+      continue;
+    }
+
+    if (!line.trim()) {
+      closeList();
+      continue;
+    }
+
+    closeList();
+    html += `<p>${escapeHtml(line)}</p>`;
+  }
+
+  closeList();
+  return html.replaceAll(/`([^`]+)`/g, "<code>$1</code>");
+};
+
+const renderCommandsPage = (
+  settings: DiscordSettings,
+  user: AuthenticatedUser | undefined,
+  showSuperAdmin: boolean,
+  markdown: string,
+  activeServer?: { id: string; name: string },
+  servers: Array<{ id: string; name: string }> = [],
+) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Commands</title>
+    ${renderPageStyles()}
+  </head>
+  <body>
+    ${renderTopMenu("commands", settings, user, showSuperAdmin, activeServer, servers)}
+    <div class="page-wrap">
+      <main>${markdownToHtml(markdown)}</main>
+    </div>
+  </body>
+</html>`;
+
+const renderInvitePage = (
+  settings: DiscordSettings,
+  user: AuthenticatedUser | undefined,
+  showSuperAdmin: boolean,
+  activeServer?: { id: string; name: string },
+  servers: Array<{ id: string; name: string }> = [],
+) => {
   const generatedInviteUrl = inviteUrl(settings.discordClientId);
 
   return `<!doctype html>
@@ -394,69 +810,18 @@ const renderInvitePage = (settings: DiscordSettings) => {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Invite Star Citizen Event Bot</title>
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: Arial, sans-serif;
-        background: #f4f6f8;
-        color: #17202a;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: grid;
-        place-items: start center;
-        padding: 48px 16px;
-      }
-      main {
-        width: min(680px, 100%);
-        background: #ffffff;
-        border: 1px solid #d7dde4;
-        border-radius: 8px;
-        padding: 28px;
-        box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
-      }
-      h1 {
-        margin: 0 0 12px;
-        font-size: 28px;
-      }
-      .button {
-        display: inline-block;
-        margin: 18px 0;
-        border-radius: 6px;
-        padding: 12px 16px;
-        color: #ffffff;
-        background: #2563eb;
-        font-weight: 700;
-        text-decoration: none;
-      }
-      .notice {
-        padding: 12px;
-        border-radius: 6px;
-        background: #fef3c7;
-        color: #92400e;
-      }
-      ul {
-        padding-left: 22px;
-      }
-      li {
-        margin: 6px 0;
-      }
-      code {
-        background: #f1f5f9;
-        border-radius: 4px;
-        padding: 2px 5px;
-      }
-    </style>
+    ${renderPageStyles()}
   </head>
   <body>
+    ${renderTopMenu("invite", settings, user, showSuperAdmin, activeServer, servers)}
+    <div class="page-wrap">
     <main>
       <h1>Invite Star Citizen Event Bot</h1>
       <p>Add the hosted bot to your Discord server to create Star Citizen event signups and participant-only loot pools.</p>
       ${
         generatedInviteUrl
           ? `<a class="button" href="${escapeHtml(generatedInviteUrl)}" target="_blank" rel="noreferrer">Invite bot to your server</a>`
-          : `<p class="notice">The bot owner needs to configure the App ID before this invite page can generate a link.</p>`
+          : `<p class="notice">The bot owner needs to configure the Application ID before this invite page can generate a link.</p>`
       }
       <h2>Discord will ask for</h2>
       <ul>
@@ -475,6 +840,7 @@ const renderInvitePage = (settings: DiscordSettings) => {
       </ul>
       <p><a href="/slash-commands" target="_blank" rel="noreferrer">Open full slash command reference</a></p>
     </main>
+    </div>
   </body>
 </html>`;
 };
@@ -483,81 +849,265 @@ export const startSetupServer = async () => {
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-      if (await handleApiRequest(request, response, url)) {
+      const settings = await loadSettings();
+
+      if (request.method === "GET" && url.pathname === "/login") {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(
+          renderLoginPage(settings, getSessionUser(request), url.searchParams.get("returnTo") ?? "/app"),
+        );
         return;
       }
 
-      if (request.method === "GET" && (await serveWebApp(url, response))) {
+      if (request.method === "GET" && url.pathname === "/auth/discord") {
+        beginDiscordLogin(request, response, settings, url.searchParams.get("returnTo") ?? "/app");
         return;
       }
 
-      if (request.method === "GET" && request.url === "/") {
-        response.writeHead(302, { location: "/invite" });
+      if (request.method === "GET" && url.pathname === "/auth/discord/callback") {
+        await completeDiscordLogin(request, response, settings, url);
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/logout") {
+        logout(response);
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/") {
+        response.writeHead(302, { location: "/app/active-events" });
         response.end();
         return;
       }
 
-      if (request.method === "GET" && request.url === "/admin") {
-        requireAdminAccess(request);
-        const settings = await loadSettings();
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(renderPage(settings));
+      if (request.method === "GET" && url.pathname === "/settings") {
+        response.writeHead(302, { location: "/super-admin" });
+        response.end();
         return;
       }
 
-      if (request.method === "GET" && request.url === "/invite") {
-        const settings = await loadSettings();
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(renderInvitePage(settings));
-        return;
-      }
+      if (request.method === "POST" && url.pathname === "/active-server") {
+        const user = requireAuthenticatedUser(request, response, request.headers.referer ?? "/app");
+        if (!user) {
+          return;
+        }
 
-      if (request.method === "GET" && request.url === "/slash-commands") {
-        const commands = await readFile("./docs/slash-commands.md", "utf8");
-        response.writeHead(200, { "content-type": "text/markdown; charset=utf-8" });
-        response.end(commands);
-        return;
-      }
-
-      if (request.method === "POST" && request.url === "/settings") {
-        requireAdminAccess(request);
-        const existing = await loadSettings();
+        const { servers } = activeServerForRequest(request, user);
         const body = new URLSearchParams(await readRequestBody(request));
-        const settings = await saveSettings(
+        const guildId = body.get("guildId") ?? "";
+        if (servers.some((server) => server.id === guildId)) {
+          setActiveGuild(request, guildId);
+        }
+
+        response.writeHead(302, { location: request.headers.referer ?? "/app" });
+        response.end();
+        return;
+      }
+
+      if (url.pathname.startsWith("/api/")) {
+        const user = requireAuthenticatedApiUser(request, response);
+        if (!user) {
+          return;
+        }
+
+        const payload = sessionPayload(request, settings, user);
+        const activeGuildId = payload.activeServer?.id;
+
+        if (request.method === "GET" && url.pathname === "/api/events/stream") {
+          addEventStreamClient(response);
+          return;
+        }
+
+        if (request.method === "GET" && url.pathname === "/api/session") {
+          response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          response.end(JSON.stringify(payload));
+          return;
+        }
+
+        if (await handleApiRequest(request, response, url, user, activeGuildId)) {
+          return;
+        }
+      }
+
+      if (request.method === "GET" && (url.pathname === "/app" || url.pathname.startsWith("/app/"))) {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/app");
+        if (!user) {
+          return;
+        }
+
+        const payload = sessionPayload(request, settings, user);
+        if (!payload.servers.length && !payload.requiresGuildReconnect) {
+          response.writeHead(302, { location: "/admin" });
+          response.end();
+          return;
+        }
+
+        if (await serveWebApp(url, response, payload)) {
+          return;
+        }
+      }
+
+      if (request.method === "GET" && url.pathname === "/admin") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/admin");
+        if (!user) {
+          return;
+        }
+        const { active, servers } = activeServerForRequest(request, user);
+
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(
+          renderAdminPage(
+            settings,
+            user,
+            canSeeSuperAdminLink(request, settings, user),
+            active,
+            servers,
+          ),
+        );
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/super-admin") {
+        const user =
+          isLoginConfigured(settings) || authConfig(settings).adminUserIds.length
+            ? requireAuthenticatedUser(request, response, request.url ?? "/super-admin")
+            : getSessionUser(request);
+        if ((isLoginConfigured(settings) || authConfig(settings).adminUserIds.length) && !user) {
+          return;
+        }
+
+        requireAdminAccess(request, settings, user);
+        const activeInfo = user ? activeServerForRequest(request, user) : { active: undefined, servers: [] };
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(
+          renderSuperAdminPage(
+            settings,
+            undefined,
+            user,
+            canSeeSuperAdminLink(request, settings, user),
+            activeInfo.active,
+            activeInfo.servers,
+          ),
+        );
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/invite") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/invite");
+        if (!user) {
+          return;
+        }
+        const { active, servers } = activeServerForRequest(request, user);
+
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(
+          renderInvitePage(settings, user, canSeeSuperAdminLink(request, settings, user), active, servers),
+        );
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/slash-commands") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/slash-commands");
+        if (!user) {
+          return;
+        }
+        const { active, servers } = activeServerForRequest(request, user);
+
+        const commands = await readFile("./docs/slash-commands.md", "utf8");
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(
+          renderCommandsPage(
+            settings,
+            user,
+            canSeeSuperAdminLink(request, settings, user),
+            commands,
+            active,
+            servers,
+          ),
+        );
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/settings") {
+        const existing = settings;
+        const user =
+          isLoginConfigured(existing) || authConfig(existing).adminUserIds.length
+            ? requireAuthenticatedUser(request, response, request.url ?? "/admin")
+            : getSessionUser(request);
+        if (isLoginConfigured(existing) || authConfig(existing).adminUserIds.length) {
+          if (!user) {
+            return;
+          }
+        }
+
+        requireAdminAccess(request, existing, user);
+        const body = new URLSearchParams(await readRequestBody(request));
+        const nextSettings = await saveSettings(
           {
             discordToken: body.get("discordToken") ?? undefined,
             discordClientId: body.get("discordClientId") ?? undefined,
+            discordClientSecret: body.get("discordClientSecret") ?? undefined,
             discordGuildId: body.get("discordGuildId") ?? undefined,
+            adminDiscordUserIds: body.get("adminDiscordUserIds") ?? undefined,
           },
           existing,
         );
 
-        let notice = (await startBot(settings)).message;
+        let notice = (await startBot(nextSettings)).message;
         if (body.get("registerCommands") === "yes") {
-          const scope = await registerTestGuildCommands(settings);
+          const scope = await registerTestGuildCommands(nextSettings);
           notice += ` Slash commands registered for ${scope}.`;
         }
 
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(renderPage(settings, notice));
+        response.end(
+          renderSuperAdminPage(
+            nextSettings,
+            notice,
+            user,
+            canSeeSuperAdminLink(request, nextSettings, user),
+          ),
+        );
         return;
       }
 
-      if (request.method === "POST" && request.url === "/register-test") {
-        requireAdminAccess(request);
-        const settings = await loadSettings();
+      if (request.method === "POST" && url.pathname === "/register-test") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/super-admin");
+        if (!user) {
+          return;
+        }
+
+        requireAdminAccess(request, settings, user);
         const scope = await registerTestGuildCommands(settings);
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(renderPage(settings, `Slash commands registered for ${scope}.`));
+        response.end(
+          renderSuperAdminPage(
+            settings,
+            `Slash commands registered for ${scope}.`,
+            user,
+            canSeeSuperAdminLink(request, settings, user),
+          ),
+        );
         return;
       }
 
-      if (request.method === "POST" && request.url === "/register-global") {
-        requireAdminAccess(request);
-        const settings = await loadSettings();
+      if (request.method === "POST" && url.pathname === "/register-global") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/super-admin");
+        if (!user) {
+          return;
+        }
+
+        requireAdminAccess(request, settings, user);
         const scope = await registerGlobalCommands(settings);
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(renderPage(settings, `Slash commands registered ${scope}.`));
+        response.end(
+          renderSuperAdminPage(
+            settings,
+            `Slash commands registered ${scope}.`,
+            user,
+            canSeeSuperAdminLink(request, settings, user),
+          ),
+        );
         return;
       }
 
@@ -565,14 +1115,23 @@ export const startSetupServer = async () => {
       response.end("Not found");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong.";
-      if (message.startsWith("Admin access is not allowed")) {
+      if (
+        message.startsWith("Admin access is not allowed") ||
+        message.startsWith("Admin access is only available")
+      ) {
         response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
         response.end(message);
         return;
       }
 
       response.writeHead(500, { "content-type": "text/html; charset=utf-8" });
-      response.end(renderPage(await loadSettings().catch(() => ({})), message));
+      response.end(
+        renderSuperAdminPage(
+          await loadSettings().catch(() => ({})),
+          message,
+          getSessionUser(request),
+        ),
+      );
     }
   });
 
@@ -580,7 +1139,7 @@ export const startSetupServer = async () => {
     server.listen(envConfig.SETUP_PORT, envConfig.SETUP_HOST, resolve);
   });
 
-  console.log(`Public invite page available at http://localhost:${envConfig.SETUP_PORT}/invite`);
-  console.log(`Admin page available at http://localhost:${envConfig.SETUP_PORT}/admin`);
+  console.log(`App available at http://localhost:${envConfig.SETUP_PORT}/app`);
+  console.log(`Super Admin page available at http://localhost:${envConfig.SETUP_PORT}/super-admin`);
   return server;
 };

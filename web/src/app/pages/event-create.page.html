@@ -1,0 +1,179 @@
+<app-menu active="create-event" />
+
+<ion-content>
+  <main class="page-shell event-create-page">
+    <ion-card class="compact-card create-card">
+      <ion-card-header>
+        <ion-card-title>Create Event</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <section class="create-form-grid">
+          <ion-list lines="full" class="form-section">
+            <ion-item>
+              <ion-input label="Event name" labelPlacement="stacked" [(ngModel)]="form.name" required />
+            </ion-item>
+            <ion-item>
+              <ion-textarea label="Description" labelPlacement="stacked" autoGrow="true" [(ngModel)]="form.description" />
+            </ion-item>
+            <ion-item>
+              <ion-input label="Logo image URL" labelPlacement="stacked" [(ngModel)]="form.logoUrl" />
+            </ion-item>
+            <ion-item>
+              <ion-input label="Start time" labelPlacement="stacked" type="datetime-local" [(ngModel)]="form.startsAt" />
+            </ion-item>
+          </ion-list>
+
+          <ion-list lines="full" class="form-section">
+            <ion-item>
+              <ion-select label="Role template" labelPlacement="stacked" [(ngModel)]="form.preset" (ionChange)="presetChanged()">
+                <ion-select-option value="combat-op">Combat op</ion-select-option>
+                <ion-select-option value="ground-team">Ground team</ion-select-option>
+                <ion-select-option value="ship-crew">Ship crew</ion-select-option>
+                <ion-select-option value="custom">Custom</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
+              <ion-select label="Loot claim window" labelPlacement="stacked" [(ngModel)]="form.lootDurationHours">
+                <ion-select-option [value]="24">24 hours after event end</ion-select-option>
+                <ion-select-option [value]="48">48 hours after event end</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
+              <ion-toggle labelPlacement="start" [(ngModel)]="allowExtraCrew">Extra crew</ion-toggle>
+            </ion-item>
+          </ion-list>
+        </section>
+
+        <section class="crew-builder">
+          <div class="builder-heading">
+            <h2>Fleet</h2>
+            <button class="mini-button primary" type="button" (click)="addShip()">Add ship</button>
+          </div>
+
+          <article class="builder-card" *ngFor="let ship of ships; let shipIndex = index">
+            <header>
+              <h3>Ship {{ shipIndex + 1 }}</h3>
+              <button class="mini-button danger" type="button" (click)="removeShip(shipIndex)">Remove ship</button>
+            </header>
+            <div class="builder-grid">
+              <ion-input label="Ship type" labelPlacement="stacked" [(ngModel)]="ship.type" />
+              <ion-input label="Crew count" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="ship.crewCount" />
+            </div>
+            <div class="role-row header-row">
+              <strong>Role</strong>
+              <strong>Slots</strong>
+              <span></span>
+            </div>
+            <div class="role-row" *ngFor="let role of ship.roles; let roleIndex = index">
+              <ion-input label="Role" labelPlacement="stacked" [(ngModel)]="role.label" />
+              <ion-input label="Slots" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="role.capacity" />
+              <button class="mini-button danger" type="button" (click)="removeShipRole(ship, roleIndex)">Remove</button>
+            </div>
+            <div class="builder-footer">
+              <span class="muted">Assigned role slots: {{ roleTotal(ship.roles) }} / Crew count: {{ ship.crewCount }}</span>
+              <button class="mini-button" type="button" (click)="addShipRole(ship)">Add role</button>
+            </div>
+          </article>
+
+          <p class="muted" *ngIf="!ships.length">No ships added.</p>
+        </section>
+
+        <section class="crew-builder">
+          <div class="builder-heading">
+            <h2>Ground Teams</h2>
+            <button class="mini-button primary" type="button" (click)="addGroundTeam()">Add ground team</button>
+          </div>
+
+          <article class="builder-card" *ngFor="let team of groundTeams; let teamIndex = index">
+            <header>
+              <h3>Ground Team {{ teamIndex + 1 }}</h3>
+              <button class="mini-button danger" type="button" (click)="removeGroundTeam(teamIndex)">Remove team</button>
+            </header>
+            <div class="builder-grid">
+              <ion-input label="Team name/type" labelPlacement="stacked" [(ngModel)]="team.name" />
+              <ion-input label="Crew count" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="team.crewCount" />
+            </div>
+            <div class="role-row header-row">
+              <strong>Role</strong>
+              <strong>Slots</strong>
+              <span></span>
+            </div>
+            <div class="role-row" *ngFor="let role of team.roles; let roleIndex = index">
+              <ion-input label="Role" labelPlacement="stacked" [(ngModel)]="role.label" />
+              <ion-input label="Slots" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="role.capacity" />
+              <button class="mini-button danger" type="button" (click)="removeGroundRole(team, roleIndex)">Remove</button>
+            </div>
+            <div class="builder-footer">
+              <span class="muted">Assigned role slots: {{ roleTotal(team.roles) }} / Crew count: {{ team.crewCount }}</span>
+              <button class="mini-button" type="button" (click)="addGroundRole(team)">Add role</button>
+            </div>
+          </article>
+
+          <p class="muted" *ngIf="!groundTeams.length">No ground teams added.</p>
+        </section>
+
+        <div class="create-actions">
+          <ion-button expand="block" (click)="createEvent()" [disabled]="saving || !form.name.trim() || !previewSlots().length">
+            {{ saving ? "Creating..." : "Create event" }}
+          </ion-button>
+        </div>
+
+        <div class="error-panel" *ngIf="error">{{ error }}</div>
+        <section class="notice-panel" *ngIf="createdEvent">
+          <strong>Event created</strong>
+          <p>{{ createdEvent.name }} is ready in {{ createdEvent.activeServerName || "the active server" }}.</p>
+          <div class="event-button-row">
+            <a class="mini-button primary" [href]="'/app/events/' + createdEvent.id">View event</a>
+            <button class="mini-button" (click)="copyId(createdEvent.id)">Copy event ID</button>
+          </div>
+        </section>
+      </ion-card-content>
+    </ion-card>
+
+    <section class="discord-preview" aria-label="Discord preview">
+      <h2>{{ form.name || "New Star Citizen Event" }}</h2>
+      <p class="muted">Event ID: created after save</p>
+      <p *ngIf="form.startsAt">Starts: {{ form.startsAt | date: "medium" }}</p>
+      <p *ngIf="form.description">{{ form.description }}</p>
+      <p>Status: OPEN</p>
+
+      <section class="preview-group" *ngIf="hasPreviewGroup('ship')">
+        <h3>Fleet</h3>
+        <div class="slot-grid">
+          <div class="slot-preview" *ngFor="let slot of groupedPreviewSlots('ship')">
+            <strong>{{ slot.category }} - {{ slot.label }} (0/{{ slot.capacity }})</strong>
+            <p class="muted" *ngFor="let open of emptySlots(slot.capacity)">Open {{ open }}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="preview-group" *ngIf="hasPreviewGroup('ground')">
+        <h3>Ground</h3>
+        <div class="slot-grid">
+          <div class="slot-preview" *ngFor="let slot of groupedPreviewSlots('ground')">
+            <strong>{{ slot.category }} - {{ slot.label }} (0/{{ slot.capacity }})</strong>
+            <p class="muted" *ngFor="let open of emptySlots(slot.capacity)">Open {{ open }}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="preview-group" *ngIf="hasPreviewGroup('extra')">
+        <h3>Extra</h3>
+        <div class="slot-grid">
+          <div class="slot-preview" *ngFor="let slot of groupedPreviewSlots('extra')">
+            <strong>{{ slot.category }} - {{ slot.label }} (0/{{ slot.capacity }})</strong>
+            <p class="muted">Open standby slots</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="event-button-row">
+        <button class="mini-button primary" *ngFor="let slot of groupedPreviewSlots('ship')">{{ slot.label }}</button>
+        <button class="mini-button primary" *ngFor="let slot of groupedPreviewSlots('ground')">{{ slot.label }}</button>
+        <button class="mini-button primary" *ngIf="allowExtraCrew">Extra crew</button>
+        <button class="mini-button">Copy event ID</button>
+        <button class="mini-button danger">Leave event</button>
+      </div>
+    </section>
+  </main>
+</ion-content>

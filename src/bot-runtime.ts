@@ -20,6 +20,17 @@ export const botStatus = (settings?: DiscordSettings) => ({
       : undefined,
 });
 
+export const botGuilds = () => {
+  if (!client?.isReady()) {
+    return [];
+  }
+
+  return client.guilds.cache.map((guild) => ({
+    id: guild.id,
+    name: guild.name,
+  }));
+};
+
 export const stopBot = async () => {
   stopScheduler?.();
   stopScheduler = undefined;

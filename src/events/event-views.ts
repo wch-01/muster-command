@@ -52,14 +52,20 @@ export const eventEmbed = (event: EventWithSlots) => {
 };
 
 export const eventComponents = (event: EventWithSlots) => {
+  const regularSlots = event.slots.filter((slot) => slot.assignmentGroup !== "extra");
+  const regularSlotsFull =
+    regularSlots.length > 0 &&
+    regularSlots.every((slot) => slot.assignments.length >= slot.capacity);
+
   const buttons = event.slots.slice(0, 23).map((slot) => {
     const isFull = slot.assignments.length >= slot.capacity;
+    const isExtraLocked = slot.assignmentGroup === "extra" && !regularSlotsFull;
 
     return new ButtonBuilder()
       .setCustomId(eventJoinId(slot.id))
       .setLabel(slot.label.slice(0, 80))
       .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Primary)
-      .setDisabled(event.status !== "OPEN" || isFull);
+      .setDisabled(event.status !== "OPEN" || isFull || isExtraLocked);
   });
 
   buttons.push(
