@@ -85,13 +85,19 @@ npm run db:migrate
 npm run dev
 ```
 
-6. Open the private admin page:
+6. Open the private Super Admin page:
 
 ```text
-http://localhost:3000/admin
+http://localhost:3000/super-admin
 ```
 
-Paste the Discord bot token, client ID, and server ID into the setup page. The page shows whether the bot is configured or not configured, and the saved token is not displayed again.
+Paste the Application ID, OAuth2 client secret, Discord bot token, server ID, and your Discord user ID into the setup page. Add this redirect URL in the Discord Developer Portal under OAuth2:
+
+```text
+http://localhost:3000/auth/discord/callback
+```
+
+The page shows whether the bot and Discord login are configured. Saved secrets are not displayed again.
 
 7. Open the web app:
 
@@ -109,13 +115,15 @@ Start the stack:
 docker compose up --build -d
 ```
 
-Then open the private admin page:
+Then open the private Super Admin page:
 
 ```text
-http://localhost:3000/admin
+http://localhost:3000/super-admin
 ```
 
-The bot service runs database migrations on startup, launches the web app at `/app`, launches the public invite page at `/invite`, launches the private admin page at `/admin`, and starts the Discord bot after credentials are saved. Settings are stored in a Docker volume named `settings-data`.
+The bot service runs database migrations on startup, launches the web app at `/app`, launches the invite page at `/invite`, launches the server admin placeholder at `/admin`, launches the owner-only Super Admin page at `/super-admin`, and starts the Discord bot after credentials are saved. Settings are stored in a Docker volume named `settings-data`.
+
+All app pages and API routes require Discord login. Until an admin Discord user ID is saved, `/super-admin` remains available only from `ADMIN_ALLOWED_HOSTS` for first-time setup. After an admin ID is saved, `/super-admin` requires Discord login as that user.
 
 ## Raspberry Pi And Tailscale
 
@@ -125,19 +133,19 @@ For the planned Pi deployment:
 ADMIN_ALLOWED_HOSTS=localhost,127.0.0.1,::1
 ```
 
-The app redirects `/` to `/invite`. The admin page at `/admin` is blocked unless the request host is in `ADMIN_ALLOWED_HOSTS`.
+The app redirects `/` to `/app`. The Super Admin page at `/super-admin` is blocked unless the request host is in `ADMIN_ALLOWED_HOSTS` during first-time setup or the logged-in Discord user is a configured Super Admin.
 
 Recommended exposure:
 
 ```text
-Public:   /app, /invite, and /slash-commands
-Private:  /admin over Tailscale
+Public:   /app, /invite, /slash-commands, and /admin
+Private:  /super-admin over Tailscale
 ```
 
 With Tailscale, the private admin URL should be:
 
 ```text
-http://localhost:3000/admin
+http://localhost:3000/super-admin
 ```
 
 ## PhpStorm

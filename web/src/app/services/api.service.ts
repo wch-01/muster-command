@@ -5,7 +5,7 @@ export type EventMember = {
   id: string;
   name: string;
   slot: string;
-  group: "ship" | "ground";
+  group: "ship" | "ground" | "extra";
   hasBid: boolean;
 };
 
@@ -40,7 +40,14 @@ export type EventSummary = {
   startsAt: string | null;
   status: "OPEN" | "CLOSED";
   lootDurationHours: number;
-  slots: Array<{ assignments: unknown[] }>;
+  slots: Array<{
+    id: string;
+    category: string;
+    assignmentGroup: "ship" | "ground" | "extra";
+    label: string;
+    capacity: number;
+    assignments: Array<{ discordUserId: string; discordTag: string }>;
+  }>;
   raffles: Array<{ items: unknown[] }>;
 };
 
@@ -64,12 +71,37 @@ export type CreateEventInput = {
   customSlots?: string;
 };
 
+export type WebSession = {
+  user: {
+    id: string;
+    username: string;
+    globalName?: string;
+  };
+  isSuperAdmin: boolean;
+  activeServer?: { id: string; name: string };
+  servers: Array<{ id: string; name: string }>;
+  requiresServerSetup: boolean;
+  requiresGuildReconnect: boolean;
+};
+
 @Injectable({ providedIn: "root" })
 export class ApiService {
   constructor(private readonly http: HttpClient) {}
 
+  getSession() {
+    return this.http.get<WebSession>("/api/session");
+  }
+
   listEvents() {
     return this.http.get<EventSummary[]>("/api/events");
+  }
+
+  listActiveEvents() {
+    return this.http.get<EventSummary[]>("/api/events?status=OPEN");
+  }
+
+  listPastEvents() {
+    return this.http.get<EventSummary[]>("/api/events?status=CLOSED&mine=yes");
   }
 
   getEvent(id: string) {
@@ -96,12 +128,28 @@ export class ApiService {
     });
   }
 
+  joinSlot(eventId: string, slotId: string) {
+    return this.http.post<EventDetails>(`/api/events/${eventId}/slots/${slotId}/join`, {});
+  }
+
+  leaveEvent(eventId: string) {
+    return this.http.post<EventDetails>(`/api/events/${eventId}/leave`, {});
+  }
+
   rememberOwnerKey(eventId: string, ownerKey: string) {
-    localStorage.setItem(this.ownerStorageKey(eventId), ownerKey);
+    try {
+      localStorage.setItem(this.ownerStorageKey(eventId), ownerKey);
+    } catch (error) {
+      console.warn("Could not save event owner key to local storage:", error);
+    }
   }
 
   ownerKeyForEvent(eventId: string) {
-    return localStorage.getItem(this.ownerStorageKey(eventId)) ?? "";
+    try {
+      return localStorage.getItem(this.ownerStorageKey(eventId)) ?? "";
+    } catch (error) {
+      return "";
+    }
   }
 
   private ownerStorageKey(eventId: string) {

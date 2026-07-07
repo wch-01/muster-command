@@ -6,7 +6,9 @@ import { type DiscordSettings, envConfig, settingsFromEnv } from "./config.js";
 const savedSettingsSchema = z.object({
   discordToken: z.string().optional(),
   discordClientId: z.string().optional(),
+  discordClientSecret: z.string().optional(),
   discordGuildId: z.string().optional(),
+  adminDiscordUserIds: z.string().optional(),
 });
 
 const normalize = (value: string | undefined) => {
@@ -41,7 +43,9 @@ export const saveSettings = async (
   const next = {
     discordToken: normalize(input.discordToken) ?? existing.discordToken,
     discordClientId: normalize(input.discordClientId),
+    discordClientSecret: normalize(input.discordClientSecret) ?? existing.discordClientSecret,
     discordGuildId: normalize(input.discordGuildId),
+    adminDiscordUserIds: normalize(input.adminDiscordUserIds),
   };
 
   await mkdir(dirname(envConfig.SETTINGS_FILE), { recursive: true });

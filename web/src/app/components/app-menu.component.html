@@ -1,0 +1,29 @@
+<header class="top-menu">
+  <a class="brand" href="/app/active-events">Star Citizen Events</a>
+  <nav aria-label="Primary navigation">
+    <div class="menu-group" [class.active]="eventActive">
+      <button type="button">Events</button>
+      <div class="menu-dropdown">
+        <a [class.active]="active === 'active-events'" href="/app/active-events">Active Events</a>
+        <a [class.active]="active === 'create-event'" href="/app/events">Create Event</a>
+        <a [class.active]="active === 'past-events'" href="/app/past-events">Past Events</a>
+      </div>
+    </div>
+    <a [class.active]="active === 'loot'" href="/app/loot">Loot</a>
+    <a [class.active]="active === 'invite'" href="/invite">Invite</a>
+    <a [class.active]="active === 'commands'" href="/slash-commands">Commands</a>
+    <a [class.active]="active === 'admin'" href="/admin">Admin</a>
+    <a *ngIf="isSuperAdmin" [class.active]="active === 'super-admin'" href="/super-admin">Super Admin</a>
+  </nav>
+  <div class="user-menu">
+    <form class="server-select" method="post" action="/active-server">
+      <label for="activeGuildId">Active Server</label>
+      <select id="activeGuildId" name="guildId" [value]="activeServer?.id" onchange="this.form.submit()">
+        <option *ngFor="let server of servers" [value]="server.id">{{ server.name }}</option>
+        <option *ngIf="!servers.length" value="">No shared server</option>
+      </select>
+    </form>
+    <span *ngIf="userName">{{ userName }}</span>
+    <a href="/logout">Log out</a>
+  </div>
+</header>

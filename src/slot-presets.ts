@@ -1,6 +1,6 @@
 export type SlotSeed = {
   category: string;
-  assignmentGroup: "ship" | "ground";
+  assignmentGroup: "ship" | "ground" | "extra";
   label: string;
   capacity: number;
 };
@@ -35,6 +35,10 @@ export type SlotPresetName = keyof typeof slotPresets;
 
 export const inferAssignmentGroup = (category: string, label: string): SlotSeed["assignmentGroup"] => {
   const text = `${category} ${label}`.toLowerCase();
+  if (text.includes("extra")) {
+    return "extra";
+  }
+
   return text.includes("ground") ||
     text.includes("medic") ||
     text.includes("industrial") ||
@@ -45,18 +49,28 @@ export const inferAssignmentGroup = (category: string, label: string): SlotSeed[
 };
 
 export const parseCustomSlots = (input: string): SlotSeed[] => {
+  const parseAssignmentGroup = (value: string | undefined, category: string, label: string) => {
+    if (value === "ship" || value === "ground" || value === "extra") {
+      return value;
+    }
+
+    return inferAssignmentGroup(category, label);
+  };
+
   return input
     .split(";")
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
-      const [label, capacityText, category = "Custom"] = part.split(":").map((value) => value.trim());
+      const [label, capacityText, category = "Custom", assignmentGroup] = part
+        .split(":")
+        .map((value) => value.trim());
       const capacity = Number.parseInt(capacityText ?? "", 10);
 
       if (!label || !Number.isInteger(capacity) || capacity < 1 || capacity > 25) {
         throw new Error("Custom slots must look like `Label:2:Category; Other label:4:Category`.");
       }
 
-      return { label, capacity, category, assignmentGroup: inferAssignmentGroup(category, label) };
+      return { label, capacity, category, assignmentGroup: parseAssignmentGroup(assignmentGroup, category, label) };
     });
 };

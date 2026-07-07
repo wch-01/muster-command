@@ -1,0 +1,49 @@
+<app-menu [active]="mode === 'active' ? 'active-events' : 'past-events'" />
+
+<ion-content>
+  <main class="page-shell">
+    <div class="toolbar-actions">
+      <h1>{{ mode === "active" ? "Active Events" : "Past Events" }}</h1>
+    </div>
+
+    <div class="error-panel" *ngIf="error">{{ error }}</div>
+
+    <article class="event-panel" *ngFor="let event of events">
+      <ng-container *ngIf="mode === 'active'; else pastEventTemplate">
+        <header class="event-list-row">
+          <div>
+            <h2>{{ event.name }}</h2>
+            <p class="muted">Owner: {{ event.createdById }}</p>
+          </div>
+          <a class="mini-button primary" [href]="'/app/events/' + event.id">View</a>
+        </header>
+      </ng-container>
+
+      <ng-template #pastEventTemplate>
+        <header>
+          <div>
+            <h2>{{ event.name }}</h2>
+            <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
+          </div>
+          <a [href]="'/app/events/' + event.id + '/loot'">Loot</a>
+        </header>
+        <p *ngIf="event.description">{{ event.description }}</p>
+        <div class="event-id-row">
+          <code>{{ event.id }}</code>
+          <button class="mini-button" (click)="copyId(event.id)">Copy</button>
+        </div>
+        <div class="slot-grid">
+          <div class="slot-preview" *ngFor="let slot of event.slots">
+            <strong>{{ slot.category }} - {{ slot.label }} ({{ slot.assignments.length }}/{{ slot.capacity }})</strong>
+            <p class="muted" *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</p>
+            <p class="muted" *ngFor="let open of openSlots(slot)">Open {{ open }}</p>
+          </div>
+        </div>
+      </ng-template>
+    </article>
+
+    <p class="muted" *ngIf="!events.length">
+      {{ mode === "active" ? "No active events for this server." : "No past events you participated in." }}
+    </p>
+  </main>
+</ion-content>
