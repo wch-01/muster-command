@@ -4,10 +4,27 @@ import { prisma } from "./db.js";
 import { handleButton } from "./interactions/buttons.js";
 import { handleCommand } from "./interactions/commands.js";
 import { startLootScheduler } from "./loot/scheduler.js";
+import type { AuthenticatedUser } from "./auth.js";
 
 let client: Client | undefined;
 let stopScheduler: (() => void) | undefined;
 let activeToken: string | undefined;
+
+const withTimeout = async <T>(task: Promise<T>, milliseconds: number) => {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<undefined>((resolve) => {
+        timeout = setTimeout(() => resolve(undefined), milliseconds);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+};
 
 export const botStatus = (settings?: DiscordSettings) => ({
   configured: Boolean(activeToken),
@@ -29,6 +46,75 @@ export const botGuilds = () => {
     id: guild.id,
     name: guild.name,
   }));
+};
+
+export const botGuildMemberProfile = async (guildId: string, user: AuthenticatedUser) => {
+  const fallback = {
+    guildId,
+    userId: user.id,
+    displayName: user.globalName ?? user.username,
+    nickname: undefined as string | undefined,
+    username: user.username,
+    avatar: user.avatar,
+  };
+
+  if (!client?.isReady()) {
+    return fallback;
+  }
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) {
+    return fallback;
+  }
+
+  const member = await withTimeout(guild.members.fetch(user.id).catch(() => null), 750);
+  if (!member) {
+    return fallback;
+  }
+
+  return {
+    guildId,
+    userId: user.id,
+    displayName: member.displayName || fallback.displayName,
+    nickname: member.nickname ?? undefined,
+    username: member.user.username,
+    avatar: member.displayAvatarURL(),
+  };
+};
+
+export const botGuildPermissionOptions = async (guildId: string) => {
+  if (!client?.isReady()) {
+    return { roles: [], users: [], userListAvailable: false };
+  }
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) {
+    return { roles: [], users: [], userListAvailable: false };
+  }
+
+  const [fetchedRoles, members] = await Promise.all([
+    withTimeout(guild.roles.fetch().catch(() => null), 750),
+    withTimeout(guild.members.fetch().catch(() => null), 1_000),
+  ]);
+  const roles = fetchedRoles
+    ? [...fetchedRoles.values()]
+        .filter((role) => role.id !== guild.id && !role.managed)
+        .map((role) => ({ id: role.id, name: role.name }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
+
+  const users = members
+    ? [...members.values()]
+        .filter((member) => !member.user.bot)
+        .map((member) => ({
+          id: member.user.id,
+          name: member.displayName || member.user.username,
+          username: member.user.username,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
+
+  return { roles, users, userListAvailable: Boolean(members) };
 };
 
 export const stopBot = async () => {

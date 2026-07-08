@@ -1,40 +1,143 @@
 <app-menu active="active-events" />
 
 <ion-content>
-  <main class="page-shell" *ngIf="event">
-    <ion-card class="compact-card">
+  <main class="page-shell event-detail" *ngIf="event; else loading">
+    <section class="event-hero">
       <img *ngIf="event.logoUrl" class="event-logo" [src]="event.logoUrl" [alt]="event.name" />
-      <ion-card-header>
-        <ion-card-title>{{ event.name }}</ion-card-title>
-        <ion-card-subtitle>{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</ion-card-subtitle>
-      </ion-card-header>
-      <ion-card-content>
-        <p *ngIf="event.description">{{ event.description }}</p>
-        <p class="muted">Event ID: {{ event.id }}</p>
-        <ion-chip>{{ event.status }}</ion-chip>
-        <ion-chip>Loot window: {{ event.lootDurationHours }} hours</ion-chip>
-        <ion-button [routerLink]="['/events', event.id, 'loot']">Open loot panel</ion-button>
-      </ion-card-content>
-    </ion-card>
+      <div class="event-heading">
+        <div>
+          <h1>{{ event.name }}</h1>
+          <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
+        </div>
+        <div class="toolbar-actions">
+          <ion-chip>{{ event.status }}</ion-chip>
+          <ion-button color="secondary" (click)="lootOpen = true">Loot</ion-button>
+          <ion-button *ngIf="event.isOwner" color="danger" fill="outline" (click)="endEvent()" [disabled]="event.status !== 'OPEN' || busyAction === 'end'">
+            {{ busyAction === "end" ? "Ending..." : "End Event" }}
+          </ion-button>
+        </div>
+      </div>
+      <p *ngIf="event.description">{{ event.description }}</p>
+      <div class="event-meta">
+        <span>Owner: {{ event.createdByName }}</span>
+        <span>Event ID: {{ event.id }}</span>
+        <span>Loot window: {{ event.lootDurationHours }} hours</span>
+      </div>
+      <p class="error-panel" *ngIf="error">{{ error }}</p>
+    </section>
 
-    <section class="list-grid">
-      <ion-card class="compact-card">
-        <ion-card-header>
-          <ion-card-title>Members</ion-card-title>
-          <ion-card-subtitle>Highlighted members have bid at least once</ion-card-subtitle>
-        </ion-card-header>
-        <ion-card-content>
-          <ion-list lines="none">
-            <ion-item class="member-row" *ngFor="let member of event.members">
-              <ion-label [class.bidder]="member.hasBid">
-                {{ member.name }}
-                <p>{{ member.slot }} - {{ member.group }}</p>
-              </ion-label>
-              <ion-badge *ngIf="member.hasBid" color="success">Bid placed</ion-badge>
-            </ion-item>
-          </ion-list>
-        </ion-card-content>
-      </ion-card>
+    <section class="signup-layout">
+      <article class="event-panel" *ngFor="let group of groups">
+        <header>
+          <div>
+            <h2>{{ groupTitle(group) }}</h2>
+            <p class="muted" *ngIf="group === 'ship'">One fleet role per person.</p>
+            <p class="muted" *ngIf="group === 'ground'">One ground role per person.</p>
+            <p class="muted" *ngIf="group === 'extra'">
+              Extra crew opens when all listed fleet and ground roles are full.
+            </p>
+          </div>
+          <ion-badge *ngIf="group === 'extra' && isExtraLocked()" color="medium">Locked</ion-badge>
+        </header>
+
+        <div class="slot-list" *ngIf="groupedSlots(group).length; else noSlots">
+          <div class="slot-row" *ngFor="let slot of groupedSlots(group)">
+            <div class="slot-copy">
+              <strong>{{ slot.label }}</strong>
+              <span>{{ slot.category }}</span>
+              <small>{{ slot.assignments.length }}/{{ slot.capacity }}</small>
+            </div>
+            <div class="slot-members">
+              <span *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</span>
+              <span class="muted" *ngIf="!slot.assignments.length">Open</span>
+            </div>
+            <ion-button
+              size="small"
+              (click)="joinSlot(slot)"
+              [disabled]="event.status !== 'OPEN' || slotFilled(slot) || (group === 'extra' && isExtraLocked()) || busyAction === 'join-' + slot.id"
+            >
+              {{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}
+            </ion-button>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="event-actions">
+      <ion-button fill="outline" color="medium" (click)="leaveEvent()" [disabled]="busyAction === 'leave'">
+        {{ busyAction === "leave" ? "Leaving..." : "Leave Event" }}
+      </ion-button>
+      <ion-button fill="outline" (click)="loadEvent()">Refresh</ion-button>
     </section>
   </main>
+
+  <ng-template #loading>
+    <main class="page-shell loading-state">
+      <ion-spinner />
+      <p>Loading event...</p>
+    </main>
+  </ng-template>
+
+  <ng-template #noSlots>
+    <p class="muted">No roles in this group.</p>
+  </ng-template>
 </ion-content>
+
+<div class="modal-backdrop" *ngIf="lootOpen && event" (click)="lootOpen = false">
+  <section class="loot-modal" role="dialog" aria-modal="true" aria-label="Event loot" (click)="$event.stopPropagation()">
+    <header class="loot-header">
+      <div>
+        <h2>Loot for {{ event.name }}</h2>
+        <p class="muted" *ngIf="raffle?.endsAt">Ends {{ raffle?.endsAt | date: "medium" }}</p>
+        <p class="muted" *ngIf="!raffle?.endsAt">Loot timer starts when the event is ended.</p>
+      </div>
+      <div class="toolbar-actions">
+        <ion-badge *ngIf="event.isOwner" color="success">{{ bidProgress }} participants bid</ion-badge>
+        <ion-button *ngIf="event.isOwner" color="secondary" (click)="drawLoot()" [disabled]="raffle?.status === 'DRAWN'">
+          Draw Loot
+        </ion-button>
+        <ion-button fill="clear" color="medium" (click)="lootOpen = false">Close</ion-button>
+      </div>
+    </header>
+
+    <section class="loot-add">
+      <ion-input label="Add loot items" labelPlacement="stacked" [(ngModel)]="newItems" placeholder="Gem, Armor, Weapon" />
+      <ion-button (click)="addLootItems()" [disabled]="!event.canAddLoot || !newItems.trim() || raffle?.status === 'DRAWN'">
+        Add Loot
+      </ion-button>
+      <p class="muted" *ngIf="!event.canAddLoot">Only event participants can add loot.</p>
+      <p class="error-panel" *ngIf="lootError">{{ lootError }}</p>
+    </section>
+
+    <section class="loot-grid">
+      <article class="loot-item" *ngFor="let item of lootItems">
+        <header>
+          <div>
+            <h3>{{ item.name }}</h3>
+            <p class="muted">Added by {{ item.addedByName }}</p>
+          </div>
+          <ion-badge>{{ item.bidCount }} bid{{ item.bidCount === 1 ? "" : "s" }}</ion-badge>
+        </header>
+
+        <p class="winner" *ngIf="item.winnerTag">Winner: {{ item.winnerTag }}</p>
+
+        <ion-list lines="none" *ngIf="event.isOwner && item.bids.length">
+          <ion-item class="member-row" *ngFor="let bid of item.bids">
+            <ion-label>{{ bid.discordTag }}</ion-label>
+          </ion-item>
+        </ion-list>
+
+        <div class="item-actions">
+          <ion-button size="small" (click)="toggleBid(item)" [disabled]="!event.canAddLoot || raffle?.status === 'DRAWN'">
+            {{ item.hasMyBid ? "Remove Bid" : "Bid" }}
+          </ion-button>
+          <ion-button size="small" color="danger" fill="outline" (click)="removeLootItem(item)" [disabled]="!item.canDelete || raffle?.status === 'DRAWN'">
+            Delete
+          </ion-button>
+        </div>
+      </article>
+    </section>
+
+    <p class="muted" *ngIf="!lootItems.length">No loot has been added yet.</p>
+  </section>
+</div>

@@ -18,8 +18,13 @@ export type LootBid = {
 export type LootItem = {
   id: string;
   name: string;
+  addedById: string;
+  addedByName: string;
   winnerUserId: string | null;
   winnerTag: string | null;
+  bidCount: number;
+  hasMyBid: boolean;
+  canDelete: boolean;
   bids: LootBid[];
 };
 
@@ -34,6 +39,7 @@ export type LootRaffle = {
 export type EventSummary = {
   id: string;
   createdById: string;
+  createdByName: string;
   name: string;
   description: string | null;
   logoUrl: string | null;
@@ -55,6 +61,9 @@ export type EventDetails = EventSummary & {
   isOwner: boolean;
   members: EventMember[];
   raffles: LootRaffle[];
+  participantCount: number;
+  participantsWithBidCount: number;
+  canAddLoot: boolean;
 };
 
 export type CreatedEventDetails = EventDetails & {
@@ -78,10 +87,27 @@ export type WebSession = {
     globalName?: string;
   };
   isSuperAdmin: boolean;
-  activeServer?: { id: string; name: string };
-  servers: Array<{ id: string; name: string }>;
+  activeServer?: {
+    id: string;
+    name: string;
+    userProfile?: ServerProfile;
+  };
+  servers: Array<{
+    id: string;
+    name: string;
+    userProfile?: ServerProfile;
+  }>;
   requiresServerSetup: boolean;
   requiresGuildReconnect: boolean;
+};
+
+export type ServerProfile = {
+  guildId: string;
+  userId: string;
+  displayName: string;
+  nickname?: string;
+  username: string;
+  avatar?: string;
 };
 
 @Injectable({ providedIn: "root" })
@@ -115,11 +141,16 @@ export class ApiService {
   }
 
   addLootItems(eventId: string, items: string) {
-    return this.http.post<EventDetails>(`/api/events/${eventId}/loot/items`, { items });
+    return this.http.post<EventDetails>(`/api/events/${eventId}/loot/items`, {
+      items,
+      ownerKey: this.ownerKeyForEvent(eventId),
+    });
   }
 
-  removeLootItem(itemId: string) {
-    return this.http.delete<EventDetails>(`/api/loot/items/${itemId}`);
+  removeLootItem(eventId: string, itemId: string) {
+    return this.http.request<EventDetails>("DELETE", `/api/loot/items/${itemId}`, {
+      body: { ownerKey: this.ownerKeyForEvent(eventId) },
+    });
   }
 
   drawLoot(eventId: string) {
@@ -128,12 +159,28 @@ export class ApiService {
     });
   }
 
+  endEvent(eventId: string) {
+    return this.http.post<EventDetails>(`/api/events/${eventId}/end`, {
+      ownerKey: this.ownerKeyForEvent(eventId),
+    });
+  }
+
   joinSlot(eventId: string, slotId: string) {
-    return this.http.post<EventDetails>(`/api/events/${eventId}/slots/${slotId}/join`, {});
+    return this.http.post<EventDetails>(`/api/events/${eventId}/slots/${slotId}/join`, {
+      ownerKey: this.ownerKeyForEvent(eventId),
+    });
   }
 
   leaveEvent(eventId: string) {
-    return this.http.post<EventDetails>(`/api/events/${eventId}/leave`, {});
+    return this.http.post<EventDetails>(`/api/events/${eventId}/leave`, {
+      ownerKey: this.ownerKeyForEvent(eventId),
+    });
+  }
+
+  toggleLootBid(eventId: string, itemId: string) {
+    return this.http.post<EventDetails>(`/api/loot/items/${itemId}/bid`, {
+      ownerKey: this.ownerKeyForEvent(eventId),
+    });
   }
 
   rememberOwnerKey(eventId: string, ownerKey: string) {

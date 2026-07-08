@@ -9,8 +9,6 @@
         <a [class.active]="active === 'past-events'" href="/app/past-events">Past Events</a>
       </div>
     </div>
-    <a [class.active]="active === 'loot'" href="/app/loot">Loot</a>
-    <a [class.active]="active === 'invite'" href="/invite">Invite</a>
     <a [class.active]="active === 'commands'" href="/slash-commands">Commands</a>
     <a [class.active]="active === 'admin'" href="/admin">Admin</a>
     <a *ngIf="isSuperAdmin" [class.active]="active === 'super-admin'" href="/super-admin">Super Admin</a>

@@ -13,7 +13,7 @@
         <header class="event-list-row">
           <div>
             <h2>{{ event.name }}</h2>
-            <p class="muted">Owner: {{ event.createdById }}</p>
+            <p class="muted">Owner: {{ event.createdByName }}</p>
           </div>
           <a class="mini-button primary" [href]="'/app/events/' + event.id">View</a>
         </header>
@@ -25,7 +25,7 @@
             <h2>{{ event.name }}</h2>
             <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
           </div>
-          <a [href]="'/app/events/' + event.id + '/loot'">Loot</a>
+          <a class="mini-button primary" [href]="'/app/events/' + event.id">View</a>
         </header>
         <p *ngIf="event.description">{{ event.description }}</p>
         <div class="event-id-row">

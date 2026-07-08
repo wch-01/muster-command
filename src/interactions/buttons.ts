@@ -42,11 +42,25 @@ const handleEventJoin = async (interaction: ButtonInteraction, slotId: string) =
   }
 
   await prisma.$transaction(async (tx) => {
+    if (slot.assignmentGroup !== "extra") {
+      const extraAssignment = await tx.crewAssignment.findFirst({
+        where: {
+          eventId: slot.eventId,
+          discordUserId: interaction.user.id,
+          assignmentGroup: "extra",
+        },
+      });
+
+      if (extraAssignment) {
+        throw new Error("Extra crew members can only stay in the extra crew area.");
+      }
+    }
+
     await tx.crewAssignment.deleteMany({
       where: {
         eventId: slot.eventId,
         discordUserId: interaction.user.id,
-        assignmentGroup: slot.assignmentGroup,
+        assignmentGroup: slot.assignmentGroup === "extra" ? undefined : slot.assignmentGroup,
       },
     });
 

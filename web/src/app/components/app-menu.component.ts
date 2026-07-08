@@ -20,16 +20,14 @@ export class AppMenuComponent implements OnInit {
     | "active-events"
     | "create-event"
     | "past-events"
-    | "loot"
-    | "invite"
     | "commands"
     | "admin"
     | "super-admin" = "active-events";
 
   isSuperAdmin = false;
   userName = "";
-  activeServer?: { id: string; name: string };
-  servers: Array<{ id: string; name: string }> = [];
+  activeServer?: WebSession["activeServer"];
+  servers: WebSession["servers"] = [];
 
   constructor(private readonly api: ApiService) {}
 
@@ -55,9 +53,9 @@ export class AppMenuComponent implements OnInit {
       }
 
       this.isSuperAdmin = session.isSuperAdmin;
-      this.userName = session.user.globalName ?? session.user.username;
       this.activeServer = session.activeServer;
       this.servers = session.servers;
+      this.userName = session.activeServer?.userProfile?.displayName ?? session.user.globalName ?? session.user.username;
       if (session.requiresServerSetup) {
         window.location.href = "/admin";
       }

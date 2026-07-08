@@ -1,24 +1,18 @@
-DO $$
-BEGIN
-  CREATE TYPE "EventStatus" AS ENUM ('OPEN', 'CLOSED');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+CREATE TYPE "EventStatus" AS ENUM ('OPEN', 'CLOSED');
 
-DO $$
-BEGIN
-  CREATE TYPE "RaffleStatus" AS ENUM ('OPEN', 'DRAWN');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+CREATE TYPE "RaffleStatus" AS ENUM ('OPEN', 'DRAWN');
 
-CREATE TABLE IF NOT EXISTS "Event" (
+CREATE TABLE "Event" (
   "id" TEXT NOT NULL,
   "guildId" TEXT NOT NULL,
   "channelId" TEXT NOT NULL,
   "reportChannelId" TEXT,
   "createdById" TEXT NOT NULL,
+  "createdByName" TEXT NOT NULL,
+  "ownerWebKey" TEXT,
   "name" TEXT NOT NULL,
+  "description" TEXT,
+  "logoUrl" TEXT,
   "startsAt" TIMESTAMP(3),
   "endedAt" TIMESTAMP(3),
   "lootDurationHours" INTEGER NOT NULL DEFAULT 24,
@@ -28,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "Event" (
   CONSTRAINT "Event_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "CrewSlot" (
+CREATE TABLE "CrewSlot" (
   "id" TEXT NOT NULL,
   "eventId" TEXT NOT NULL,
   "category" TEXT NOT NULL,
@@ -39,7 +33,7 @@ CREATE TABLE IF NOT EXISTS "CrewSlot" (
   CONSTRAINT "CrewSlot_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "CrewAssignment" (
+CREATE TABLE "CrewAssignment" (
   "id" TEXT NOT NULL,
   "eventId" TEXT NOT NULL,
   "crewSlotId" TEXT NOT NULL,
@@ -50,7 +44,7 @@ CREATE TABLE IF NOT EXISTS "CrewAssignment" (
   CONSTRAINT "CrewAssignment_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "LootRaffle" (
+CREATE TABLE "LootRaffle" (
   "id" TEXT NOT NULL,
   "eventId" TEXT NOT NULL,
   "channelId" TEXT NOT NULL,
@@ -64,18 +58,20 @@ CREATE TABLE IF NOT EXISTS "LootRaffle" (
   CONSTRAINT "LootRaffle_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "LootItem" (
+CREATE TABLE "LootItem" (
   "id" TEXT NOT NULL,
   "eventId" TEXT NOT NULL,
   "lootRaffleId" TEXT NOT NULL,
   "name" TEXT NOT NULL,
+  "addedById" TEXT NOT NULL,
+  "addedByName" TEXT NOT NULL,
   "winnerUserId" TEXT,
   "winnerTag" TEXT,
   "sortOrder" INTEGER NOT NULL,
   CONSTRAINT "LootItem_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "LootBid" (
+CREATE TABLE "LootBid" (
   "id" TEXT NOT NULL,
   "lootItemId" TEXT NOT NULL,
   "discordUserId" TEXT NOT NULL,
@@ -84,69 +80,38 @@ CREATE TABLE IF NOT EXISTS "LootBid" (
   CONSTRAINT "LootBid_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "CrewAssignment_eventId_discordUserId_assignmentGroup_key"
+CREATE UNIQUE INDEX "Event_ownerWebKey_key" ON "Event"("ownerWebKey");
+CREATE UNIQUE INDEX "CrewAssignment_eventId_discordUserId_assignmentGroup_key"
 ON "CrewAssignment"("eventId", "discordUserId", "assignmentGroup");
+CREATE UNIQUE INDEX "LootBid_lootItemId_discordUserId_key" ON "LootBid"("lootItemId", "discordUserId");
 
-CREATE UNIQUE INDEX IF NOT EXISTS "LootBid_lootItemId_discordUserId_key"
-ON "LootBid"("lootItemId", "discordUserId");
+CREATE INDEX "Event_guildId_status_idx" ON "Event"("guildId", "status");
+CREATE INDEX "CrewSlot_eventId_sortOrder_idx" ON "CrewSlot"("eventId", "sortOrder");
+CREATE INDEX "CrewAssignment_crewSlotId_idx" ON "CrewAssignment"("crewSlotId");
+CREATE INDEX "LootRaffle_status_endsAt_idx" ON "LootRaffle"("status", "endsAt");
+CREATE INDEX "LootItem_eventId_idx" ON "LootItem"("eventId");
+CREATE INDEX "LootItem_lootRaffleId_sortOrder_idx" ON "LootItem"("lootRaffleId", "sortOrder");
 
-CREATE INDEX IF NOT EXISTS "Event_guildId_status_idx" ON "Event"("guildId", "status");
-CREATE INDEX IF NOT EXISTS "CrewSlot_eventId_sortOrder_idx" ON "CrewSlot"("eventId", "sortOrder");
-CREATE INDEX IF NOT EXISTS "CrewAssignment_crewSlotId_idx" ON "CrewAssignment"("crewSlotId");
-CREATE INDEX IF NOT EXISTS "LootRaffle_status_endsAt_idx" ON "LootRaffle"("status", "endsAt");
-CREATE INDEX IF NOT EXISTS "LootItem_eventId_idx" ON "LootItem"("eventId");
-CREATE INDEX IF NOT EXISTS "LootItem_lootRaffleId_sortOrder_idx" ON "LootItem"("lootRaffleId", "sortOrder");
+ALTER TABLE "CrewSlot"
+ADD CONSTRAINT "CrewSlot_eventId_fkey"
+FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CrewSlot_eventId_fkey') THEN
-    ALTER TABLE "CrewSlot"
-    ADD CONSTRAINT "CrewSlot_eventId_fkey"
-    FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
+ALTER TABLE "CrewAssignment"
+ADD CONSTRAINT "CrewAssignment_eventId_fkey"
+FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CrewAssignment_eventId_fkey') THEN
-    ALTER TABLE "CrewAssignment"
-    ADD CONSTRAINT "CrewAssignment_eventId_fkey"
-    FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
+ALTER TABLE "CrewAssignment"
+ADD CONSTRAINT "CrewAssignment_crewSlotId_fkey"
+FOREIGN KEY ("crewSlotId") REFERENCES "CrewSlot"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CrewAssignment_crewSlotId_fkey') THEN
-    ALTER TABLE "CrewAssignment"
-    ADD CONSTRAINT "CrewAssignment_crewSlotId_fkey"
-    FOREIGN KEY ("crewSlotId") REFERENCES "CrewSlot"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
+ALTER TABLE "LootRaffle"
+ADD CONSTRAINT "LootRaffle_eventId_fkey"
+FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LootRaffle_eventId_fkey') THEN
-    ALTER TABLE "LootRaffle"
-    ADD CONSTRAINT "LootRaffle_eventId_fkey"
-    FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
+ALTER TABLE "LootItem"
+ADD CONSTRAINT "LootItem_lootRaffleId_fkey"
+FOREIGN KEY ("lootRaffleId") REFERENCES "LootRaffle"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LootItem_lootRaffleId_fkey') THEN
-    ALTER TABLE "LootItem"
-    ADD CONSTRAINT "LootItem_lootRaffleId_fkey"
-    FOREIGN KEY ("lootRaffleId") REFERENCES "LootRaffle"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LootBid_lootItemId_fkey') THEN
-    ALTER TABLE "LootBid"
-    ADD CONSTRAINT "LootBid_lootItemId_fkey"
-    FOREIGN KEY ("lootItemId") REFERENCES "LootItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
+ALTER TABLE "LootBid"
+ADD CONSTRAINT "LootBid_lootItemId_fkey"
+FOREIGN KEY ("lootItemId") REFERENCES "LootItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;

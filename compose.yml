@@ -20,7 +20,7 @@ services:
       - "3000:3000"
     volumes:
       - settings-data:/app/data
-    command: sh -c "npx prisma migrate deploy && node dist/index.js"
+    command: sh -c "npx prisma db push --accept-data-loss && node dist/index.js"
     restart: unless-stopped
 
   postgres:
