@@ -1,6 +1,7 @@
 <header class="top-menu">
-  <a class="brand" href="/app/active-events">Star Citizen Events</a>
+  <a class="brand" href="/app/dashboard">Muster Command</a>
   <nav aria-label="Primary navigation">
+    <a [class.active]="active === 'dashboard'" href="/app/dashboard">Dashboard</a>
     <div class="menu-group" [class.active]="eventActive">
       <button type="button">Events</button>
       <div class="menu-dropdown">
@@ -9,18 +10,27 @@
         <a [class.active]="active === 'past-events'" href="/app/past-events">Past Events</a>
       </div>
     </div>
-    <a [class.active]="active === 'commands'" href="/slash-commands">Commands</a>
+    <a [class.active]="active === 'commands'" href="/slash-commands">Bot Commands</a>
+    <a [class.active]="active === 'templates'" href="/app/templates">Templates</a>
     <a [class.active]="active === 'admin'" href="/admin">Admin</a>
     <a *ngIf="isSuperAdmin" [class.active]="active === 'super-admin'" href="/super-admin">Super Admin</a>
   </nav>
   <div class="user-menu">
-    <form class="server-select" method="post" action="/active-server">
+    <div class="server-select">
       <label for="activeGuildId">Active Server</label>
-      <select id="activeGuildId" name="guildId" [value]="activeServer?.id" onchange="this.form.submit()">
-        <option *ngFor="let server of servers" [value]="server.id">{{ server.name }}</option>
-        <option *ngIf="!servers.length" value="">No shared server</option>
+      <select
+        id="activeGuildId"
+        name="guildId"
+        [value]="selectedGuildId"
+        (change)="changeActiveServer($event)"
+      >
+        <option *ngIf="!servers.length" value="" disabled>No shared server</option>
+        <option *ngIf="activeServer" [value]="activeServer.id" selected>{{ activeServer.name }}</option>
+        <option *ngFor="let server of otherServers" [value]="server.id">{{ server.name }}</option>
+        <option value="" disabled>--------</option>
+        <option value="__invite">+ Add bot to another server</option>
       </select>
-    </form>
+    </div>
     <span *ngIf="userName">{{ userName }}</span>
     <a href="/logout">Log out</a>
   </div>

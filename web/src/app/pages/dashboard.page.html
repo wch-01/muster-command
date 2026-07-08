@@ -1,0 +1,51 @@
+<app-menu active="dashboard" />
+
+<ion-content>
+  <main class="page-shell dashboard-page">
+    <header class="dashboard-header">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="muted">Active events across every server you share with the bot.</p>
+      </div>
+      <button class="mini-button" type="button" (click)="loadDashboard()">Refresh</button>
+    </header>
+
+    <div class="error-panel" *ngIf="error">{{ error }}</div>
+
+    <section class="empty-dashboard" *ngIf="!servers.length && !error">
+      <h2>No servers found</h2>
+      <p>The bot is not installed in any Discord servers you can manage yet.</p>
+      <a class="mini-button primary" [href]="botInviteUrl">Add bot to a server</a>
+    </section>
+
+    <section class="dashboard-grid" *ngIf="servers.length">
+      <article class="server-card" *ngFor="let server of servers">
+        <header class="server-card-header">
+          <img *ngIf="server.iconUrl" [src]="server.iconUrl" [alt]="server.name" />
+          <div class="server-icon-fallback" *ngIf="!server.iconUrl">{{ server.name.slice(0, 1) }}</div>
+          <div>
+            <h2>{{ server.name }}</h2>
+            <p class="muted">{{ server.activeEventCount }} active event{{ server.activeEventCount === 1 ? "" : "s" }}</p>
+          </div>
+        </header>
+
+        <div class="dashboard-events" *ngIf="server.activeEvents.length; else noActiveEvents">
+          <a class="dashboard-event" *ngFor="let event of server.activeEvents" [href]="selectServerUrl(server.id, '/app/events/' + event.id)">
+            <strong>{{ event.name }}</strong>
+            <span>{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</span>
+          </a>
+          <p class="muted" *ngIf="moreCount(server)">+{{ moreCount(server) }} more active events</p>
+        </div>
+
+        <ng-template #noActiveEvents>
+          <p class="muted no-events">No active events</p>
+        </ng-template>
+
+        <footer class="server-card-actions">
+          <a class="mini-button" [href]="selectServerUrl(server.id, '/app/active-events')">View all events</a>
+          <a class="mini-button primary" [href]="selectServerUrl(server.id, '/app/events')">Create event</a>
+        </footer>
+      </article>
+    </section>
+  </main>
+</ion-content>

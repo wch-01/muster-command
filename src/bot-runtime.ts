@@ -45,6 +45,7 @@ export const botGuilds = () => {
   return client.guilds.cache.map((guild) => ({
     id: guild.id,
     name: guild.name,
+    iconUrl: guild.iconURL({ size: 64 }) ?? undefined,
   }));
 };
 
@@ -138,7 +139,7 @@ export const startBot = async (settings: DiscordSettings) => {
   await stopBot();
 
   const nextClient = new Client({
-    intents: [GatewayIntentBits.Guilds],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   });
 
   nextClient.once(Events.ClientReady, (readyClient) => {

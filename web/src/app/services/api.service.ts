@@ -87,18 +87,41 @@ export type WebSession = {
     globalName?: string;
   };
   isSuperAdmin: boolean;
+  botInviteUrl?: string;
   activeServer?: {
     id: string;
     name: string;
+    iconUrl?: string;
     userProfile?: ServerProfile;
   };
   servers: Array<{
     id: string;
     name: string;
+    iconUrl?: string;
     userProfile?: ServerProfile;
   }>;
   requiresServerSetup: boolean;
   requiresGuildReconnect: boolean;
+};
+
+export type DashboardEvent = {
+  id: string;
+  name: string;
+  startsAt: string | null;
+  status: "OPEN" | "CLOSED";
+  createdByName: string;
+};
+
+export type DashboardServer = {
+  id: string;
+  name: string;
+  iconUrl?: string;
+  activeEventCount: number;
+  activeEvents: DashboardEvent[];
+};
+
+export type DashboardSummary = {
+  servers: DashboardServer[];
 };
 
 export type ServerProfile = {
@@ -116,6 +139,10 @@ export class ApiService {
 
   getSession() {
     return this.http.get<WebSession>("/api/session");
+  }
+
+  getDashboard() {
+    return this.http.get<DashboardSummary>("/api/dashboard");
   }
 
   listEvents() {

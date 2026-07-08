@@ -17,22 +17,31 @@ declare global {
 })
 export class AppMenuComponent implements OnInit {
   @Input() active:
+    | "dashboard"
     | "active-events"
     | "create-event"
     | "past-events"
     | "commands"
+    | "templates"
     | "admin"
-    | "super-admin" = "active-events";
+    | "super-admin" = "dashboard";
 
   isSuperAdmin = false;
   userName = "";
   activeServer?: WebSession["activeServer"];
   servers: WebSession["servers"] = [];
+  botInviteUrl = "/bot-invite";
+  selectedGuildId = "";
 
   constructor(private readonly api: ApiService) {}
 
   get eventActive() {
     return this.active === "active-events" || this.active === "create-event" || this.active === "past-events";
+  }
+
+  get otherServers() {
+    const activeId = this.activeServer?.id;
+    return activeId ? this.servers.filter((server) => server.id !== activeId) : this.servers;
   }
 
   ngOnInit() {
@@ -55,9 +64,24 @@ export class AppMenuComponent implements OnInit {
       this.isSuperAdmin = session.isSuperAdmin;
       this.activeServer = session.activeServer;
       this.servers = session.servers;
+      this.botInviteUrl = session.botInviteUrl ?? "/bot-invite";
       this.userName = session.activeServer?.userProfile?.displayName ?? session.user.globalName ?? session.user.username;
-      if (session.requiresServerSetup) {
-        window.location.href = "/admin";
-      }
+      this.selectedGuildId = session.activeServer?.id ?? "";
+  }
+
+  changeActiveServer(event: Event) {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value === "__invite") {
+      window.location.href = this.botInviteUrl;
+      return;
+    }
+
+    if (!value || value === this.activeServer?.id) {
+      this.selectedGuildId = this.activeServer?.id ?? "";
+      return;
+    }
+
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `/active-server?guildId=${encodeURIComponent(value)}&returnTo=${encodeURIComponent(returnTo)}`;
   }
 }
