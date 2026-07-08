@@ -85,21 +85,27 @@ npm run db:push
 npm run dev
 ```
 
-6. Open the private Super Admin page:
+6. Create your local environment file:
 
-```text
-http://localhost:3000/super-admin
+```bash
+cp .env.example .env
 ```
 
-Paste the Application ID, OAuth2 client secret, Discord bot token, server ID, and your Discord user ID into the setup page. Add this redirect URL in the Discord Developer Portal under OAuth2:
+Set `DISCORD_BOT_TOKEN`, `APPLICATION_ID`, `DISCORD_CLIENT_SECRET`, and `ADMIN_DISCORD_USER_IDS` in `.env`. Add this redirect URL in the Discord Developer Portal under OAuth2:
 
 ```text
 http://localhost:3000/auth/discord/callback
 ```
 
-The page shows whether the bot and Discord login are configured. Saved secrets are not displayed again.
+7. Open the System Admin page:
 
-7. Open the web app:
+```text
+http://localhost:3000/system-admin
+```
+
+System Admin requires Discord login, and the logged-in Discord user ID must match `ADMIN_DISCORD_USER_IDS`.
+
+8. Open the web app:
 
 ```text
 http://localhost:3000/app
@@ -115,15 +121,22 @@ Start the stack:
 docker compose up --build -d
 ```
 
-Then open the private Super Admin page:
+For named environments, use the ignored files next to `compose.yml`:
 
-```text
-http://localhost:3000/super-admin
+```bash
+docker compose --env-file .env.dev up --build -d
+docker compose --env-file .env.prod up --build -d
 ```
 
-The bot service pushes the current `0.0.1` database schema on startup, launches the web app at `/app`, launches the server admin page at `/admin`, launches the owner-only Super Admin page at `/super-admin`, and starts the Discord bot after credentials are saved. Settings are stored in a Docker volume named `settings-data`.
+Then open the private System Admin page:
 
-All app pages and API routes require Discord login. Until an admin Discord user ID is saved, `/super-admin` remains available only from `ADMIN_ALLOWED_HOSTS` for first-time setup. After an admin ID is saved, `/super-admin` requires Discord login as that user.
+```text
+http://localhost:3000/system-admin
+```
+
+The bot service pushes the current `0.0.1` database schema on startup, launches the web app at `/app`, launches the server admin page at `/admin`, launches the owner-only System Admin page at `/system-admin`, and starts the Discord bot from environment credentials. Server settings are stored in a Docker volume named `settings-data`.
+
+All app pages and API routes require Discord login. `/system-admin` also requires the logged-in Discord user ID to match `ADMIN_DISCORD_USER_IDS` from the environment file.
 
 ## Raspberry Pi And Tailscale
 
@@ -133,19 +146,19 @@ For the planned Pi deployment:
 ADMIN_ALLOWED_HOSTS=localhost,127.0.0.1,::1,housetalonpinas.tailbb76d4.ts.net
 ```
 
-The app redirects `/` to `/app`. The Super Admin page at `/super-admin` is blocked unless the request host is in `ADMIN_ALLOWED_HOSTS` during first-time setup or the logged-in Discord user is a configured Super Admin.
+The app redirects `/` to `/app`. The System Admin page at `/system-admin` is blocked unless the logged-in Discord user is a configured System Admin.
 
 Recommended exposure:
 
 ```text
 Public:   /app, /slash-commands, and /admin
-Private:  /super-admin over Tailscale
+Private:  /system-admin over Tailscale
 ```
 
 With Tailscale, the private admin URL should be:
 
 ```text
-http://housetalonpinas.tailbb76d4.ts.net:3000/super-admin
+http://housetalonpinas.tailbb76d4.ts.net:3000/system-admin
 ```
 
 ## PhpStorm

@@ -24,7 +24,7 @@ export class AppMenuComponent implements OnInit {
     | "commands"
     | "templates"
     | "admin"
-    | "super-admin" = "dashboard";
+    | "system-admin" = "dashboard";
 
   isSuperAdmin = false;
   userName = "";
@@ -32,6 +32,7 @@ export class AppMenuComponent implements OnInit {
   servers: WebSession["servers"] = [];
   botInviteUrl = "/bot-invite";
   selectedGuildId = "";
+  state: WebSession["state"] = "production";
 
   constructor(private readonly api: ApiService) {}
 
@@ -62,6 +63,7 @@ export class AppMenuComponent implements OnInit {
       }
 
       this.isSuperAdmin = session.isSuperAdmin;
+      this.state = session.state;
       this.activeServer = session.activeServer;
       this.servers = session.servers;
       this.botInviteUrl = session.botInviteUrl ?? "/bot-invite";

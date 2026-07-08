@@ -34,6 +34,18 @@ a {
   white-space: nowrap;
 }
 
+.env-badge {
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+
 .top-menu nav {
   display: flex;
   gap: 4px;

@@ -4,11 +4,6 @@ import { z } from "zod";
 import { type DiscordSettings, envConfig, settingsFromEnv } from "./config.js";
 
 const savedSettingsSchema = z.object({
-  discordToken: z.string().optional(),
-  discordClientId: z.string().optional(),
-  discordClientSecret: z.string().optional(),
-  discordGuildId: z.string().optional(),
-  adminDiscordUserIds: z.string().optional(),
   eventOutputMode: z.enum(["channel", "thread"]).optional(),
   eventOutputChannelId: z.string().optional(),
   lootOutputChannelId: z.string().optional(),
@@ -58,13 +53,7 @@ export const saveSettings = async (
   input: DiscordSettings,
   existing: DiscordSettings,
 ): Promise<DiscordSettings> => {
-  const next = {
-    ...existing,
-    discordToken: normalize(input.discordToken) ?? existing.discordToken,
-    discordClientId: textSetting(input, existing, "discordClientId"),
-    discordClientSecret: normalize(input.discordClientSecret) ?? existing.discordClientSecret,
-    discordGuildId: textSetting(input, existing, "discordGuildId"),
-    adminDiscordUserIds: textSetting(input, existing, "adminDiscordUserIds"),
+  const nextSaved = {
     eventOutputMode:
       input.eventOutputMode === "thread" || input.eventOutputMode === "channel"
         ? input.eventOutputMode
@@ -79,6 +68,9 @@ export const saveSettings = async (
   };
 
   await mkdir(dirname(envConfig.SETTINGS_FILE), { recursive: true });
-  await writeFile(envConfig.SETTINGS_FILE, JSON.stringify(next, null, 2), "utf8");
-  return next;
+  await writeFile(envConfig.SETTINGS_FILE, JSON.stringify(nextSaved, null, 2), "utf8");
+  return {
+    ...settingsFromEnv(),
+    ...nextSaved,
+  };
 };

@@ -422,8 +422,8 @@ export const renderLoginPage = (
         user
           ? `<p>You are logged in as ${escapeHtml(user.globalName ?? user.username)}.</p><a class="button" href="${escapeHtml(destination)}">Continue</a> <a class="button secondary" href="/logout">Log out</a>`
           : configured
-            ? `<p>Use Discord to access the Star Citizen event tools.</p><a class="button" href="/auth/discord?returnTo=${encodeURIComponent(destination)}">Continue with Discord</a>`
-            : `<p class="notice">Discord login is not configured yet. Add an Application ID and Client Secret on the Super Admin page from an allowed local or Tailscale host.</p><p><code>/super-admin</code> is available only for initial setup until an admin Discord user ID is saved.</p>`
+            ? `<p>Use Discord to access Muster Command.</p><a class="button" href="/auth/discord?returnTo=${encodeURIComponent(destination)}">Continue with Discord</a>`
+            : `<p class="notice">Discord login is not configured yet. Add <code>APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code> to the environment file next to <code>compose.yml</code>.</p>`
       }
     </main>
   </body>

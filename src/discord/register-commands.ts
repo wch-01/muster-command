@@ -8,26 +8,22 @@ export const registerCommands = async (settings: DiscordSettings) => {
   }
 
   const rest = new REST({ version: "10" }).setToken(settings.discordToken!);
-  const route = settings.discordGuildId
-    ? Routes.applicationGuildCommands(settings.discordClientId!, settings.discordGuildId)
-    : Routes.applicationCommands(settings.discordClientId!);
+  await rest.put(Routes.applicationCommands(settings.discordClientId!), { body: commands });
 
-  await rest.put(route, { body: commands });
-
-  return settings.discordGuildId ? `guild ${settings.discordGuildId}` : "global";
+  return "global";
 };
 
-export const registerTestGuildCommands = async (settings: DiscordSettings) => {
-  if (!isDiscordConfigured(settings) || !settings.discordGuildId) {
-    throw new Error("Discord token, App ID, and test server ID are required.");
+export const registerGuildCommands = async (settings: DiscordSettings, guildId: string) => {
+  if (!isDiscordConfigured(settings) || !guildId) {
+    throw new Error("Discord token, App ID, and selected server are required.");
   }
 
   const rest = new REST({ version: "10" }).setToken(settings.discordToken!);
-  await rest.put(Routes.applicationGuildCommands(settings.discordClientId!, settings.discordGuildId), {
+  await rest.put(Routes.applicationGuildCommands(settings.discordClientId!, guildId), {
     body: commands,
   });
 
-  return `test server ${settings.discordGuildId}`;
+  return `selected server ${guildId}`;
 };
 
 export const registerGlobalCommands = async (settings: DiscordSettings) => {
