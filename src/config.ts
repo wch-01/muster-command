@@ -25,6 +25,12 @@ export type DiscordSettings = {
   discordClientSecret?: string;
   discordGuildId?: string;
   adminDiscordUserIds?: string;
+  eventOutputMode?: "channel" | "thread";
+  eventOutputChannelId?: string;
+  lootOutputChannelId?: string;
+  threadAutoDeleteDays?: number;
+  templateControlUserIds?: string;
+  templateControlRoleIds?: string;
 };
 
 export const settingsFromEnv = (): DiscordSettings => ({

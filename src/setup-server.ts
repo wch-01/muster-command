@@ -6,7 +6,13 @@ import {
   registerGlobalCommands,
   registerTestGuildCommands,
 } from "./discord/register-commands.js";
-import { botGuilds, botStatus, startBot } from "./bot-runtime.js";
+import {
+  botGuildMemberProfile,
+  botGuildPermissionOptions,
+  botGuilds,
+  botStatus,
+  startBot,
+} from "./bot-runtime.js";
 import { loadSettings, saveSettings } from "./settings-store.js";
 import { handleApiRequest } from "./web-api.js";
 import { addEventStreamClient } from "./event-stream.js";
@@ -82,6 +88,14 @@ const serveWebApp = async (
   return true;
 };
 
+const idSet = (value: string | undefined) =>
+  new Set(
+    (value ?? "")
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+
 const inviteUrl = (appId: string | undefined) => {
   if (!appId) {
     return undefined;
@@ -139,15 +153,35 @@ const canSeeSuperAdminLink = (
   return isAdminUser(settings, user) || (!adminUserIds.length && isAdminRequestAllowed(request));
 };
 
-const availableServersForUser = (user: AuthenticatedUser | undefined) => {
+type SharedServer = {
+  id: string;
+  name: string;
+  userProfile?: Awaited<ReturnType<typeof botGuildMemberProfile>>;
+};
+
+const availableServersForUser = async (user: AuthenticatedUser | undefined): Promise<SharedServer[]> => {
   const installed = botGuilds();
   const userGuilds = user?.guilds ?? [];
   const userGuildIds = new Set(userGuilds.map((guild) => guild.id));
-  return installed.filter((guild) => userGuildIds.has(guild.id));
+  const sharedServers = installed.filter((guild) => userGuildIds.has(guild.id));
+
+  if (!user) {
+    return sharedServers.map((server) => ({ ...server }));
+  }
+
+  return Promise.all(
+    sharedServers.map(async (server) => ({
+      ...server,
+      userProfile: await botGuildMemberProfile(server.id, user),
+    })),
+  );
 };
 
-const activeServerForRequest = (request: import("node:http").IncomingMessage, user: AuthenticatedUser) => {
-  const servers = availableServersForUser(user);
+const activeServerForRequest = async (
+  request: import("node:http").IncomingMessage,
+  user: AuthenticatedUser,
+) => {
+  const servers = await availableServersForUser(user);
   const session = getSession(request);
   const active =
     servers.find((server) => server.id === session?.activeGuildId) ?? servers[0] ?? undefined;
@@ -158,12 +192,12 @@ const activeServerForRequest = (request: import("node:http").IncomingMessage, us
   return { active, servers };
 };
 
-const sessionPayload = (
+const sessionPayload = async (
   request: import("node:http").IncomingMessage,
   settings: DiscordSettings,
   user: AuthenticatedUser,
 ) => {
-  const { active, servers } = activeServerForRequest(request, user);
+  const { active, servers } = await activeServerForRequest(request, user);
   return {
     user: {
       id: user.id,
@@ -202,15 +236,16 @@ const requireAdminAccess = (
 };
 
 const renderTopMenu = (
-  active: "app" | "invite" | "commands" | "admin" | "super-admin",
+  active: "app" | "commands" | "admin" | "super-admin",
   settings: DiscordSettings,
   user: AuthenticatedUser | undefined,
   showSuperAdmin: boolean,
-  activeServer?: { id: string; name: string },
-  servers: Array<{ id: string; name: string }> = [],
+  activeServer?: { id: string; name: string; userProfile?: { displayName: string } },
+  servers: Array<{ id: string; name: string; userProfile?: { displayName: string } }> = [],
 ) => {
   const item = (href: string, label: string, key: typeof active) =>
     `<a class="${active === key ? "active" : ""}" href="${href}">${label}</a>`;
+  const profileName = activeServer?.userProfile?.displayName ?? user?.globalName ?? user?.username;
 
   return `<header class="top-menu">
     <a class="brand" href="/app/active-events">Star Citizen Events</a>
@@ -223,8 +258,6 @@ const renderTopMenu = (
           <a href="/app/past-events">Past Events</a>
         </div>
       </div>
-      <a href="/app/loot">Loot</a>
-      ${item("/invite", "Invite", "invite")}
       ${item("/slash-commands", "Commands", "commands")}
       ${item("/admin", "Admin", "admin")}
       ${showSuperAdmin ? item("/super-admin", "Super Admin", "super-admin") : ""}
@@ -244,7 +277,7 @@ const renderTopMenu = (
                 </select>
               </form>`
       }
-      ${user ? `<span>${escapeHtml(user.globalName ?? user.username)}</span>` : ""}
+        ${profileName ? `<span>${escapeHtml(profileName)}</span>` : ""}
       <a href="/logout">Log out</a>
     </div>
   </header>`;
@@ -432,13 +465,25 @@ const renderPageStyles = () => `<style>
         font-weight: 700;
       }
       input[type="text"],
-      input[type="password"] {
+      input[type="password"],
+      input[type="number"],
+      select,
+      textarea {
         width: 100%;
         box-sizing: border-box;
         border: 1px solid #cbd5e1;
         border-radius: 6px;
         padding: 11px 12px;
         font: inherit;
+      }
+      textarea {
+        min-height: 84px;
+        resize: vertical;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 14px;
       }
       .hint,
       .muted {
@@ -482,6 +527,27 @@ const renderPageStyles = () => `<style>
         gap: 8px;
         font-weight: 400;
         margin: 0;
+      }
+      .check-list {
+        display: grid;
+        gap: 8px;
+        max-height: 320px;
+        overflow: auto;
+        padding: 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #ffffff;
+      }
+      .option-row {
+        align-items: flex-start;
+        padding: 6px;
+      }
+      .option-row small {
+        display: block;
+        color: #64748b;
+      }
+      .permissions-grid {
+        align-items: start;
       }
       .invite,
       .panel {
@@ -586,7 +652,7 @@ const renderSuperAdminPage = (
       <div class="stats">
         <div class="stat"><strong>Installed Servers</strong>${escapeHtml(installedServers)}</div>
         <div class="stat"><strong>Command Mode</strong>Test server for fast updates, global for public servers</div>
-        <div class="stat"><strong>Public Invite</strong>${generatedInviteUrl ? `<a href="/invite">Open invite page</a>` : "Save Application ID first"}</div>
+        <div class="stat"><strong>Invite</strong>${generatedInviteUrl ? `<a href="/admin">Available on Admin</a>` : "Save Application ID first"}</div>
         <div class="stat"><strong>Discord Login</strong>${loginConfigured ? "Configured" : "Needs Client Secret"}</div>
         <div class="stat"><strong>Signed In</strong>${user ? escapeHtml(user.globalName ?? user.username) : "Bootstrap mode"}</div>
         <div class="stat"><strong>Admin Lock</strong>${adminIdsConfigured ? "Discord user ID required" : "Local/Tailscale bootstrap"}</div>
@@ -640,7 +706,7 @@ const renderSuperAdminPage = (
               <p>Save your Application ID first, then this page will show an invite link.</p>
             </section>`
       }
-      <p class="quick-links"><a href="/invite" target="_blank" rel="noreferrer">Open public invite page</a> | <a href="/slash-commands" target="_blank" rel="noreferrer">Open slash command reference</a></p>
+      <p class="quick-links"><a href="/admin" target="_blank" rel="noreferrer">Open server admin page</a> | <a href="/slash-commands" target="_blank" rel="noreferrer">Open slash command reference</a></p>
       <section class="help" aria-label="Discord setup help">
         <h2>Discord Developer Portal fields</h2>
         <ul>
@@ -669,13 +735,44 @@ const renderSuperAdminPage = (
 </html>`;
 };
 
-const renderAdminPage = (
+const renderCheckboxList = (
+  name: string,
+  items: Array<{ id: string; name: string; username?: string }>,
+  selected: Set<string>,
+) => {
+  if (!items.length) {
+    return `<p class="muted">No options available.</p>`;
+  }
+
+  return `<div class="check-list">
+    ${items
+      .map(
+        (item) => `<label class="checkbox option-row">
+          <input type="checkbox" name="${name}" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? "checked" : ""} />
+          <span>${escapeHtml(item.name)}${item.username && item.username !== item.name ? ` <small>${escapeHtml(item.username)}</small>` : ""}</span>
+        </label>`,
+      )
+      .join("")}
+  </div>`;
+};
+
+const renderAdminPage = async (
   settings: DiscordSettings,
   user: AuthenticatedUser | undefined,
   showSuperAdmin: boolean,
   activeServer?: { id: string; name: string },
   servers: Array<{ id: string; name: string }> = [],
+  notice?: string,
 ) => {
+  const generatedInviteUrl = inviteUrl(settings.discordClientId);
+  const outputMode = settings.eventOutputMode ?? "channel";
+  const cleanupDays = settings.threadAutoDeleteDays ?? 7;
+  const permissionOptions = activeServer
+    ? await botGuildPermissionOptions(activeServer.id)
+    : { roles: [], users: [], userListAvailable: false };
+  const selectedTemplateRoles = idSet(settings.templateControlRoleIds);
+  const selectedTemplateUsers = idSet(settings.templateControlUserIds);
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -689,13 +786,102 @@ const renderAdminPage = (
     <div class="page-wrap">
       <main>
         <h1>Admin</h1>
-        <p class="muted">Server admin controls will live here.</p>
+        ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
+        <p class="muted">Manage how this server uses the bot.</p>
+
         <section class="panel">
-          <strong>Coming soon</strong>
-          <p>This page will let Discord server admins manage how the bot works in their server.</p>
+          <h2>Invite Bot</h2>
+          <p>Add the hosted bot to your Discord server to create Star Citizen event signups and participant-only loot pools.</p>
+          ${
+            generatedInviteUrl
+              ? `<p><a class="button" href="${escapeHtml(generatedInviteUrl)}" target="_blank" rel="noreferrer">Invite bot to your server</a></p>`
+              : `<p class="notice">The bot owner needs to configure the Application ID on Super Admin before this invite link can be generated.</p>`
+          }
+          <h3>Discord will ask for</h3>
+          <ul>
+            <li><code>bot</code> scope</li>
+            <li><code>applications.commands</code> scope</li>
+            <li>View Channels</li>
+            <li>Send Messages</li>
+            <li>Embed Links</li>
+            <li>Read Message History</li>
+          </ul>
+        </section>
+
+        <section class="panel">
+          <h2>Bot Output</h2>
+          <form method="post" action="/admin/settings">
+            <label for="eventOutputMode">Event output method</label>
+            <select id="eventOutputMode" name="eventOutputMode" onchange="updateOutputFields()">
+              <option value="channel" ${outputMode === "channel" ? "selected" : ""}>Dedicated channels</option>
+              <option value="thread" ${outputMode === "thread" ? "selected" : ""}>One thread per event</option>
+            </select>
+            <p class="hint">Thread mode creates a separate event thread inside the selected channel.</p>
+
+            <div class="form-grid">
+              <div>
+                <label for="eventOutputChannelId">Channel ID</label>
+                <input id="eventOutputChannelId" name="eventOutputChannelId" type="text" value="${escapeHtml(settings.eventOutputChannelId)}" autocomplete="off" />
+                <p class="hint" data-output-help="channel">Where event signup panels should be posted.</p>
+                <p class="hint" data-output-help="thread">Where event threads should be created.</p>
+              </div>
+              <div data-output-field="loot">
+                <label for="lootOutputChannelId">Loot output channel ID</label>
+                <input id="lootOutputChannelId" name="lootOutputChannelId" type="text" value="${escapeHtml(settings.lootOutputChannelId)}" autocomplete="off" />
+                <p class="hint">Where loot updates and draw results should be posted.</p>
+              </div>
+              <div data-output-field="threadCleanup">
+                <label for="threadAutoDeleteDays">Thread cleanup after loot draw, in days</label>
+                <input id="threadAutoDeleteDays" name="threadAutoDeleteDays" type="number" min="1" max="30" value="${cleanupDays}" />
+                <p class="hint">7 days is one week.</p>
+              </div>
+            </div>
+
+            <h2>Permissions</h2>
+            <p class="hint">Event and loot bot controls are available to every logged-in user in this server. These permissions are for the upcoming template creation page.</p>
+            <div class="form-grid permissions-grid">
+              <div>
+                <h3>Template manager roles</h3>
+                ${renderCheckboxList("templateControlRoleIds", permissionOptions.roles, selectedTemplateRoles)}
+              </div>
+              <div>
+                <h3>Template manager users</h3>
+                ${
+                  permissionOptions.userListAvailable
+                    ? renderCheckboxList("templateControlUserIds", permissionOptions.users, selectedTemplateUsers)
+                    : `<p class="notice">Discord did not return the server member list. Enable the bot's Server Members Intent in the Discord Developer Portal if you want user checkboxes here.</p>
+                      ${[...selectedTemplateUsers]
+                        .map((id) => `<input type="hidden" name="templateControlUserIds" value="${escapeHtml(id)}" />`)
+                        .join("")}`
+                }
+              </div>
+            </div>
+
+            <div class="actions">
+              <button type="submit">Save Admin Settings</button>
+              <a class="button secondary" href="/slash-commands" target="_blank" rel="noreferrer">Commands</a>
+            </div>
+          </form>
         </section>
       </main>
     </div>
+    <script>
+      const updateOutputFields = () => {
+        const mode = document.getElementById("eventOutputMode")?.value;
+        document.querySelectorAll("[data-output-field='loot']").forEach((field) => {
+          field.hidden = mode === "thread";
+          field.querySelectorAll("input, select, textarea").forEach((input) => input.disabled = mode === "thread");
+        });
+        document.querySelectorAll("[data-output-field='threadCleanup']").forEach((field) => {
+          field.hidden = mode === "channel";
+          field.querySelectorAll("input, select, textarea").forEach((input) => input.disabled = mode === "channel");
+        });
+        document.querySelectorAll("[data-output-help]").forEach((field) => {
+          field.hidden = field.getAttribute("data-output-help") !== mode;
+        });
+      };
+      updateOutputFields();
+    </script>
   </body>
 </html>`;
 };
@@ -795,56 +981,6 @@ const renderCommandsPage = (
   </body>
 </html>`;
 
-const renderInvitePage = (
-  settings: DiscordSettings,
-  user: AuthenticatedUser | undefined,
-  showSuperAdmin: boolean,
-  activeServer?: { id: string; name: string },
-  servers: Array<{ id: string; name: string }> = [],
-) => {
-  const generatedInviteUrl = inviteUrl(settings.discordClientId);
-
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Invite Star Citizen Event Bot</title>
-    ${renderPageStyles()}
-  </head>
-  <body>
-    ${renderTopMenu("invite", settings, user, showSuperAdmin, activeServer, servers)}
-    <div class="page-wrap">
-    <main>
-      <h1>Invite Star Citizen Event Bot</h1>
-      <p>Add the hosted bot to your Discord server to create Star Citizen event signups and participant-only loot pools.</p>
-      ${
-        generatedInviteUrl
-          ? `<a class="button" href="${escapeHtml(generatedInviteUrl)}" target="_blank" rel="noreferrer">Invite bot to your server</a>`
-          : `<p class="notice">The bot owner needs to configure the Application ID before this invite page can generate a link.</p>`
-      }
-      <h2>Discord will ask for</h2>
-      <ul>
-        <li><code>bot</code> scope</li>
-        <li><code>applications.commands</code> scope</li>
-        <li>View Channels</li>
-        <li>Send Messages</li>
-        <li>Embed Links</li>
-        <li>Read Message History</li>
-      </ul>
-      <h2>Try first</h2>
-      <ul>
-        <li><code>/event create</code> to create an event board.</li>
-        <li><code>/loot add</code> to add loot to an event pool.</li>
-        <li><code>/loot show</code> to repost the current bidding panel.</li>
-      </ul>
-      <p><a href="/slash-commands" target="_blank" rel="noreferrer">Open full slash command reference</a></p>
-    </main>
-    </div>
-  </body>
-</html>`;
-};
-
 export const startSetupServer = async () => {
   const server = createServer(async (request, response) => {
     try {
@@ -892,7 +1028,7 @@ export const startSetupServer = async () => {
           return;
         }
 
-        const { servers } = activeServerForRequest(request, user);
+          const { servers } = await activeServerForRequest(request, user);
         const body = new URLSearchParams(await readRequestBody(request));
         const guildId = body.get("guildId") ?? "";
         if (servers.some((server) => server.id === guildId)) {
@@ -910,8 +1046,9 @@ export const startSetupServer = async () => {
           return;
         }
 
-        const payload = sessionPayload(request, settings, user);
+        const payload = await sessionPayload(request, settings, user);
         const activeGuildId = payload.activeServer?.id;
+        const activeGuildProfileName = payload.activeServer?.userProfile?.displayName;
 
         if (request.method === "GET" && url.pathname === "/api/events/stream") {
           addEventStreamClient(response);
@@ -924,7 +1061,7 @@ export const startSetupServer = async () => {
           return;
         }
 
-        if (await handleApiRequest(request, response, url, user, activeGuildId)) {
+        if (await handleApiRequest(request, response, url, user, activeGuildId, activeGuildProfileName)) {
           return;
         }
       }
@@ -935,7 +1072,7 @@ export const startSetupServer = async () => {
           return;
         }
 
-        const payload = sessionPayload(request, settings, user);
+        const payload = await sessionPayload(request, settings, user);
         if (!payload.servers.length && !payload.requiresGuildReconnect) {
           response.writeHead(302, { location: "/admin" });
           response.end();
@@ -952,11 +1089,11 @@ export const startSetupServer = async () => {
         if (!user) {
           return;
         }
-        const { active, servers } = activeServerForRequest(request, user);
+        const { active, servers } = await activeServerForRequest(request, user);
 
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
-          renderAdminPage(
+          await renderAdminPage(
             settings,
             user,
             canSeeSuperAdminLink(request, settings, user),
@@ -977,7 +1114,7 @@ export const startSetupServer = async () => {
         }
 
         requireAdminAccess(request, settings, user);
-        const activeInfo = user ? activeServerForRequest(request, user) : { active: undefined, servers: [] };
+        const activeInfo = user ? await activeServerForRequest(request, user) : { active: undefined, servers: [] };
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
           renderSuperAdminPage(
@@ -992,17 +1129,46 @@ export const startSetupServer = async () => {
         return;
       }
 
-      if (request.method === "GET" && url.pathname === "/invite") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/invite");
+      if (request.method === "POST" && url.pathname === "/admin/settings") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/admin");
         if (!user) {
           return;
         }
-        const { active, servers } = activeServerForRequest(request, user);
+        const body = new URLSearchParams(await readRequestBody(request));
+        const cleanupDays = Number.parseInt(body.get("threadAutoDeleteDays") ?? "7", 10);
+        const outputMode = body.get("eventOutputMode") === "thread" ? "thread" : "channel";
+        const nextSettings = await saveSettings(
+          {
+            eventOutputMode: outputMode,
+            eventOutputChannelId: body.get("eventOutputChannelId") ?? undefined,
+            lootOutputChannelId: outputMode === "channel" ? body.get("lootOutputChannelId") ?? undefined : undefined,
+            threadAutoDeleteDays: Number.isInteger(cleanupDays)
+              ? Math.min(Math.max(cleanupDays, 1), 30)
+              : 7,
+            templateControlUserIds: body.getAll("templateControlUserIds").join(","),
+            templateControlRoleIds: body.getAll("templateControlRoleIds").join(","),
+          },
+          settings,
+        );
+        const { active, servers } = await activeServerForRequest(request, user);
 
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
-          renderInvitePage(settings, user, canSeeSuperAdminLink(request, settings, user), active, servers),
+          await renderAdminPage(
+            nextSettings,
+            user,
+            canSeeSuperAdminLink(request, nextSettings, user),
+            active,
+            servers,
+            "Admin settings saved.",
+          ),
         );
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/invite") {
+        response.writeHead(302, { location: "/admin" });
+        response.end();
         return;
       }
 
@@ -1011,7 +1177,7 @@ export const startSetupServer = async () => {
         if (!user) {
           return;
         }
-        const { active, servers } = activeServerForRequest(request, user);
+        const { active, servers } = await activeServerForRequest(request, user);
 
         const commands = await readFile("./docs/slash-commands.md", "utf8");
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });

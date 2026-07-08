@@ -31,6 +31,12 @@ const parseStartDate = (input: string | null) => {
   return parsed;
 };
 
+const displayName = (interaction: ChatInputCommandInteraction) => {
+  return interaction.member && "displayName" in interaction.member
+    ? interaction.member.displayName
+    : interaction.user.globalName ?? interaction.user.username;
+};
+
 const sendReport = async (
   interaction: ChatInputCommandInteraction,
   reportChannelId: string | null,
@@ -72,6 +78,7 @@ const handleEventCommand = async (interaction: ChatInputCommandInteraction) => {
       channelId: interaction.channelId,
       reportChannelId: reportChannel?.id,
       createdById: interaction.user.id,
+      createdByName: displayName(interaction),
       name: interaction.options.getString("name", true),
       description: interaction.options.getString("description") ?? undefined,
       logoUrl: interaction.options.getString("logo_url") ?? undefined,
@@ -191,7 +198,10 @@ const handleLootCommand = async (interaction: ChatInputCommandInteraction) => {
       return;
     }
 
-    const raffle = await addLootItems(eventId, items);
+    const raffle = await addLootItems(eventId, items, {
+      id: interaction.user.id,
+      name: displayName(interaction),
+    });
     if (!raffle) {
       await interaction.editReply("I could not find a loot pool for that event ID.");
       return;

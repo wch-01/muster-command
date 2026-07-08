@@ -31,7 +31,11 @@ export const getRaffleByEventId = (eventId: string) => {
   });
 };
 
-export const addLootItems = async (eventId: string, items: string[]) => {
+export const addLootItems = async (
+  eventId: string,
+  items: string[],
+  addedBy: { id: string; name: string },
+) => {
   return prisma.$transaction(async (tx) => {
     const raffle = await tx.lootRaffle.findFirst({
       where: { eventId },
@@ -59,6 +63,8 @@ export const addLootItems = async (eventId: string, items: string[]) => {
         eventId,
         lootRaffleId: raffle.id,
         name,
+        addedById: addedBy.id,
+        addedByName: addedBy.name,
         sortOrder: raffle.items.length + index,
       })),
     });

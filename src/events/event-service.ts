@@ -27,6 +27,7 @@ export const createEvent = async (input: {
   channelId: string;
   reportChannelId?: string;
   createdById: string;
+  createdByName: string;
   ownerWebKey?: string;
   name: string;
   description?: string;
@@ -51,6 +52,7 @@ export const createEvent = async (input: {
       channelId: input.channelId,
       reportChannelId: input.reportChannelId,
       createdById: input.createdById,
+      createdByName: input.createdByName,
       ownerWebKey: input.ownerWebKey,
       name: input.name,
       description: input.description,

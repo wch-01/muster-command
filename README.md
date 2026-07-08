@@ -11,7 +11,7 @@ A TypeScript, Angular Ionic, and Discord bot project for Star Citizen event sign
 - Tracks attendance by event and posts a close report.
 - Creates loot roll boards after an event.
 - Shows event members on the loot panel and highlights members who have bid at least once.
-- Allows loot items to be removed from the web loot panel when mistakes happen.
+- Allows loot items to be managed from the event detail loot modal.
 - Blocks loot bids from users who did not participate in the linked event.
 - Draws loot winners automatically after 24 or 48 hours, or manually with a slash command.
 
@@ -73,10 +73,10 @@ npm install
 docker compose up postgres
 ```
 
-4. Run Prisma migrations:
+4. Push the current Prisma schema:
 
 ```bash
-npm run db:migrate
+npm run db:push
 ```
 
 5. Start the bot and setup page:
@@ -105,7 +105,7 @@ The page shows whether the bot and Discord login are configured. Saved secrets a
 http://localhost:3000/app
 ```
 
-The web app currently supports event creation, event details, event-logo display, description display, loot-panel links, loot item additions, loot item removal, and bidder highlighting for event members.
+The web app currently supports event creation, event details, event-logo display, description display, event signups, and integrated loot handling from the event detail page.
 
 ## Self-Hosted Deployment
 
@@ -121,7 +121,7 @@ Then open the private Super Admin page:
 http://localhost:3000/super-admin
 ```
 
-The bot service runs database migrations on startup, launches the web app at `/app`, launches the invite page at `/invite`, launches the server admin placeholder at `/admin`, launches the owner-only Super Admin page at `/super-admin`, and starts the Discord bot after credentials are saved. Settings are stored in a Docker volume named `settings-data`.
+The bot service pushes the current `0.0.1` database schema on startup, launches the web app at `/app`, launches the server admin page at `/admin`, launches the owner-only Super Admin page at `/super-admin`, and starts the Discord bot after credentials are saved. Settings are stored in a Docker volume named `settings-data`.
 
 All app pages and API routes require Discord login. Until an admin Discord user ID is saved, `/super-admin` remains available only from `ADMIN_ALLOWED_HOSTS` for first-time setup. After an admin ID is saved, `/super-admin` requires Discord login as that user.
 
@@ -138,7 +138,7 @@ The app redirects `/` to `/app`. The Super Admin page at `/super-admin` is block
 Recommended exposure:
 
 ```text
-Public:   /app, /invite, /slash-commands, and /admin
+Public:   /app, /slash-commands, and /admin
 Private:  /super-admin over Tailscale
 ```
 

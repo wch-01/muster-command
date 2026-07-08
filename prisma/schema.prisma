@@ -23,6 +23,7 @@ model Event {
   channelId       String
   reportChannelId String?
   createdById     String
+  createdByName   String
   ownerWebKey     String?          @unique
   name            String
   description     String?
@@ -91,6 +92,8 @@ model LootItem {
   eventId        String
   lootRaffleId   String
   name           String
+  addedById      String
+  addedByName    String
   winnerUserId   String?
   winnerTag      String?
   sortOrder      Int

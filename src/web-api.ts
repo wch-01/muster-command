@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomBytes } from "node:crypto";
 import { prisma } from "./db.js";
-import { createEvent, eventInclude } from "./events/event-service.js";
+import { createEvent, endEvent, eventInclude } from "./events/event-service.js";
 import { addLootItems, drawRaffleByEventId, lootInclude } from "./loot/loot-service.js";
 import { type SlotPresetName, slotPresets } from "./slot-presets.js";
 import type { AuthenticatedUser } from "./auth.js";
@@ -68,7 +68,10 @@ const removeOwnerWebKey = <T extends { ownerWebKey?: string | null }>(event: T) 
   return safeEvent;
 };
 
-const eventDetails = async (eventId: string, ownerKey?: string) => {
+const eventDetails = async (
+  eventId: string,
+  context: { ownerKey?: string; userId?: string } = {},
+) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
@@ -98,9 +101,32 @@ const eventDetails = async (eventId: string, ownerKey?: string) => {
     })),
   );
 
+  const isOwner = event.ownerWebKey ? context.ownerKey === event.ownerWebKey : false;
+  const participantIds = new Set(members.map((member) => member.id));
+  const participantsWithBid = new Set(members.filter((member) => member.hasBid).map((member) => member.id));
   const safeEvent = removeOwnerWebKey(event);
+  const raffles = event.raffles.map((raffle) => ({
+    ...raffle,
+    items: raffle.items.map((item) => ({
+      ...item,
+      bidCount: item.bids.length,
+      hasMyBid: context.userId
+        ? item.bids.some((bid) => bid.discordUserId === context.userId)
+        : false,
+      canDelete: Boolean(context.userId && (isOwner || item.addedById === context.userId)),
+      bids: isOwner ? item.bids : [],
+    })),
+  }));
 
-  return { ...safeEvent, isOwner: event.ownerWebKey ? ownerKey === event.ownerWebKey : false, members };
+  return {
+    ...safeEvent,
+    raffles,
+    isOwner,
+    members,
+    participantCount: participantIds.size,
+    participantsWithBidCount: participantsWithBid.size,
+    canAddLoot: Boolean(context.userId && participantIds.has(context.userId)),
+  };
 };
 
 const updateLootSortOrders = async (eventId: string, lootRaffleId: string) => {
@@ -125,6 +151,7 @@ export const handleApiRequest = async (
   url: URL,
   user?: AuthenticatedUser,
   activeGuildId?: string,
+  activeGuildProfileName?: string,
 ) => {
   try {
     if (request.method === "GET" && url.pathname === "/api/events") {
@@ -186,10 +213,18 @@ export const handleApiRequest = async (
       }
 
       const ownerKey = createOwnerWebKey();
+      if (!user || !activeGuildProfileName) {
+        json(response, 400, {
+          error: "Select a server where the bot can read your Discord server profile before creating events.",
+        });
+        return true;
+      }
+
       const event = await createEvent({
         guildId: activeGuildId ?? body.guildId ?? "web",
         channelId: body.channelId ?? "web",
-        createdById: user?.id ?? "web",
+        createdById: user.id,
+        createdByName: activeGuildProfileName,
         ownerWebKey: ownerKey,
         name: body.name.trim(),
         description: body.description?.trim() || undefined,
@@ -209,6 +244,7 @@ export const handleApiRequest = async (
         {
           id: event.id,
           createdById: event.createdById,
+          createdByName: event.createdByName,
           name: event.name,
           description: event.description,
           logoUrl: event.logoUrl,
@@ -228,7 +264,7 @@ export const handleApiRequest = async (
     const eventMatch = url.pathname.match(/^\/api\/events\/([^/]+)$/);
     if (request.method === "GET" && eventMatch) {
       const ownerKey = url.searchParams.get("ownerKey") ?? undefined;
-      const event = await eventDetails(eventMatch[1], ownerKey);
+      const event = await eventDetails(eventMatch[1], { ownerKey, userId: user?.id });
       if (!event) {
         json(response, 404, { error: "Event not found." });
         return true;
@@ -238,10 +274,43 @@ export const handleApiRequest = async (
       return true;
     }
 
+    const endEventMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/end$/);
+    if (request.method === "POST" && endEventMatch) {
+      const body = await readJsonBody<{ ownerKey?: string }>(request);
+      const event = await prisma.event.findUnique({ where: { id: endEventMatch[1] } });
+      if (!event) {
+        json(response, 404, { error: "Event not found." });
+        return true;
+      }
+
+      if (!event.ownerWebKey || event.ownerWebKey !== body.ownerKey) {
+        json(response, 403, { error: "Only the event owner can end this event." });
+        return true;
+      }
+
+      await endEvent(event.id);
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(event.id, { ownerKey: body.ownerKey, userId: user?.id }),
+      );
+      return true;
+    }
+
     const joinSlotMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/slots\/([^/]+)\/join$/);
     if (request.method === "POST" && joinSlotMatch) {
+      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
+        () => ({}) as { ownerKey?: string },
+      );
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      if (!activeGuildProfileName) {
+        json(response, 400, {
+          error: "Select a server where the bot can read your Discord server profile before joining events.",
+        });
         return true;
       }
 
@@ -279,11 +348,25 @@ export const handleApiRequest = async (
       }
 
       await prisma.$transaction(async (tx) => {
+        if (slot.assignmentGroup !== "extra") {
+          const extraAssignment = await tx.crewAssignment.findFirst({
+            where: {
+              eventId: slot.eventId,
+              discordUserId: user.id,
+              assignmentGroup: "extra",
+            },
+          });
+
+          if (extraAssignment) {
+            throw new Error("Extra crew members can only stay in the extra crew area.");
+          }
+        }
+
         await tx.crewAssignment.deleteMany({
           where: {
             eventId: slot.eventId,
             discordUserId: user.id,
-            assignmentGroup: slot.assignmentGroup,
+            assignmentGroup: slot.assignmentGroup === "extra" ? undefined : slot.assignmentGroup,
           },
         });
 
@@ -298,17 +381,24 @@ export const handleApiRequest = async (
             crewSlotId: slot.id,
             assignmentGroup: slot.assignmentGroup,
             discordUserId: user.id,
-            discordTag: user.globalName ?? user.username,
+            discordTag: activeGuildProfileName,
           },
         });
       });
 
-      jsonAndNotifyEventsChanged(response, 200, await eventDetails(slot.eventId));
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(slot.eventId, { ownerKey: body.ownerKey, userId: user.id }),
+      );
       return true;
     }
 
     const leaveEventMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/leave$/);
     if (request.method === "POST" && leaveEventMatch) {
+      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
+        () => ({}) as { ownerKey?: string },
+      );
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -321,7 +411,11 @@ export const handleApiRequest = async (
         },
       });
 
-      jsonAndNotifyEventsChanged(response, 200, await eventDetails(leaveEventMatch[1]));
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(leaveEventMatch[1], { ownerKey: body.ownerKey, userId: user.id }),
+      );
       return true;
     }
 
@@ -345,40 +439,164 @@ export const handleApiRequest = async (
         return true;
       }
 
-      jsonAndNotifyEventsChanged(response, 200, await eventDetails(event.id, body.ownerKey));
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(event.id, { ownerKey: body.ownerKey, userId: user?.id }),
+      );
       return true;
     }
 
     const addLootMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/loot\/items$/);
     if (request.method === "POST" && addLootMatch) {
-      const body = await readJsonBody<{ items?: string[] | string }>(request);
+      const body = await readJsonBody<{ items?: string[] | string; ownerKey?: string }>(request);
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      if (!activeGuildProfileName) {
+        json(response, 400, {
+          error: "Select a server where the bot can read your Discord server profile before adding loot.",
+        });
+        return true;
+      }
+
       const items = parseItems(body.items);
       if (!items.length) {
         json(response, 400, { error: "At least one loot item is required." });
         return true;
       }
 
-      const raffle = await addLootItems(addLootMatch[1], items);
+      const participant = await prisma.crewAssignment.findFirst({
+        where: {
+          eventId: addLootMatch[1],
+          discordUserId: user.id,
+        },
+      });
+
+      if (!participant) {
+        json(response, 403, { error: "Only event participants can add loot." });
+        return true;
+      }
+
+      const raffle = await addLootItems(addLootMatch[1], items, {
+        id: user.id,
+        name: activeGuildProfileName,
+      });
       if (!raffle) {
         json(response, 404, { error: "Loot pool not found." });
         return true;
       }
 
-      jsonAndNotifyEventsChanged(response, 200, await eventDetails(addLootMatch[1]));
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(addLootMatch[1], { ownerKey: body.ownerKey, userId: user.id }),
+      );
+      return true;
+    }
+
+    const bidLootMatch = url.pathname.match(/^\/api\/loot\/items\/([^/]+)\/bid$/);
+    if (request.method === "POST" && bidLootMatch) {
+      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
+        () => ({}) as { ownerKey?: string },
+      );
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      if (!activeGuildProfileName) {
+        json(response, 400, {
+          error: "Select a server where the bot can read your Discord server profile before bidding.",
+        });
+        return true;
+      }
+
+      const item = await prisma.lootItem.findUnique({
+        where: { id: bidLootMatch[1] },
+        include: { raffle: true },
+      });
+
+      if (!item || item.raffle.status !== "OPEN") {
+        json(response, 400, { error: "That loot roll is no longer open." });
+        return true;
+      }
+
+      const participant = await prisma.crewAssignment.findFirst({
+        where: {
+          eventId: item.eventId,
+          discordUserId: user.id,
+        },
+      });
+
+      if (!participant) {
+        json(response, 403, { error: "Only event participants can bid on loot." });
+        return true;
+      }
+
+      const existing = await prisma.lootBid.findUnique({
+        where: {
+          lootItemId_discordUserId: {
+            lootItemId: item.id,
+            discordUserId: user.id,
+          },
+        },
+      });
+
+      if (existing) {
+        await prisma.lootBid.delete({ where: { id: existing.id } });
+      } else {
+        await prisma.lootBid.create({
+          data: {
+            lootItemId: item.id,
+            discordUserId: user.id,
+            discordTag: activeGuildProfileName,
+          },
+        });
+      }
+
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(item.eventId, { ownerKey: body.ownerKey, userId: user.id }),
+      );
       return true;
     }
 
     const deleteLootMatch = url.pathname.match(/^\/api\/loot\/items\/([^/]+)$/);
     if (request.method === "DELETE" && deleteLootMatch) {
-      const item = await prisma.lootItem.findUnique({ where: { id: deleteLootMatch[1] } });
+      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
+        () => ({}) as { ownerKey?: string },
+      );
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      const item = await prisma.lootItem.findUnique({
+        where: { id: deleteLootMatch[1] },
+        include: { raffle: { include: { event: true } } },
+      });
       if (!item) {
         json(response, 404, { error: "Loot item not found." });
         return true;
       }
 
+      const isOwner = Boolean(item.raffle.event.ownerWebKey && item.raffle.event.ownerWebKey === body.ownerKey);
+      if (!isOwner && item.addedById !== user.id) {
+        json(response, 403, { error: "Only the item creator or event owner can delete this loot item." });
+        return true;
+      }
+
       await prisma.lootItem.delete({ where: { id: item.id } });
       await updateLootSortOrders(item.eventId, item.lootRaffleId);
-      jsonAndNotifyEventsChanged(response, 200, await eventDetails(item.eventId));
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(item.eventId, { ownerKey: body.ownerKey, userId: user.id }),
+      );
       return true;
     }
 

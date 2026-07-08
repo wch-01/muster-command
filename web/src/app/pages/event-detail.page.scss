@@ -1,3 +1,155 @@
 :host {
   display: block;
 }
+
+.event-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.event-hero,
+.loot-modal,
+.loot-item {
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.event-hero {
+  padding: 16px;
+}
+
+.event-heading,
+.loot-header,
+.event-actions,
+.loot-add {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.event-heading h1,
+.loot-header h2,
+.loot-item h3 {
+  margin: 0;
+}
+
+.event-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #475569;
+  font-size: 14px;
+}
+
+.signup-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.event-panel h2 {
+  margin: 0;
+}
+
+.slot-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.slot-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(150px, 1.2fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.slot-copy,
+.slot-members {
+  display: grid;
+  gap: 3px;
+}
+
+.slot-copy span,
+.slot-copy small {
+  color: #64748b;
+}
+
+.slot-members span:not(.muted) {
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #263b7f;
+  padding: 3px 8px;
+  width: fit-content;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.loot-modal {
+  width: min(980px, 100%);
+  max-height: min(86vh, 900px);
+  overflow: auto;
+  padding: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.loot-add {
+  align-items: end;
+  margin: 16px 0;
+}
+
+.loot-add ion-input {
+  flex: 1;
+  min-width: 240px;
+}
+
+.loot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.loot-item {
+  padding: 12px;
+}
+
+.loot-item header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.winner {
+  color: #12624b;
+  font-weight: 700;
+}
+
+.loading-state {
+  display: grid;
+  place-items: center;
+  min-height: 300px;
+}
+
+@media (max-width: 720px) {
+  .slot-row {
+    grid-template-columns: 1fr;
+  }
+
+  .loot-modal {
+    max-height: 92vh;
+  }
+}
