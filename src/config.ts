@@ -3,10 +3,12 @@ import { z } from "zod";
 
 const schema = z.object({
   DISCORD_TOKEN: z.string().optional(),
+  DISCORD_BOT_TOKEN: z.string().optional(),
   DISCORD_CLIENT_ID: z.string().optional(),
+  APPLICATION_ID: z.string().optional(),
   DISCORD_CLIENT_SECRET: z.string().optional(),
-  DISCORD_GUILD_ID: z.string().optional(),
   ADMIN_DISCORD_USER_IDS: z.string().optional(),
+  STATE: z.enum(["development", "production"]).default("production"),
   DATABASE_URL: z.string().url().optional(),
   BOT_TIMEZONE: z.string().default("UTC"),
   SETUP_HOST: z.string().default("0.0.0.0"),
@@ -23,7 +25,6 @@ export type DiscordSettings = {
   discordToken?: string;
   discordClientId?: string;
   discordClientSecret?: string;
-  discordGuildId?: string;
   adminDiscordUserIds?: string;
   eventOutputMode?: "channel" | "thread";
   eventOutputChannelId?: string;
@@ -34,10 +35,9 @@ export type DiscordSettings = {
 };
 
 export const settingsFromEnv = (): DiscordSettings => ({
-  discordToken: envConfig.DISCORD_TOKEN,
-  discordClientId: envConfig.DISCORD_CLIENT_ID,
+  discordToken: envConfig.DISCORD_TOKEN || envConfig.DISCORD_BOT_TOKEN,
+  discordClientId: envConfig.DISCORD_CLIENT_ID || envConfig.APPLICATION_ID,
   discordClientSecret: envConfig.DISCORD_CLIENT_SECRET,
-  discordGuildId: envConfig.DISCORD_GUILD_ID,
   adminDiscordUserIds: envConfig.ADMIN_DISCORD_USER_IDS,
 });
 

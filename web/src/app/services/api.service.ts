@@ -87,6 +87,7 @@ export type WebSession = {
     globalName?: string;
   };
   isSuperAdmin: boolean;
+  state: "development" | "production";
   botInviteUrl?: string;
   activeServer?: {
     id: string;

@@ -6,6 +6,7 @@ import { addLootItems, drawRaffleByEventId, lootInclude } from "./loot/loot-serv
 import { type SlotPresetName, slotPresets } from "./slot-presets.js";
 import type { AuthenticatedUser } from "./auth.js";
 import { notifyEventsChanged } from "./event-stream.js";
+import { botGuildTextChannels } from "./bot-runtime.js";
 
 const json = (response: ServerResponse, statusCode: number, data: unknown) => {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
@@ -155,6 +156,16 @@ export const handleApiRequest = async (
   sharedServers: Array<{ id: string; name: string; iconUrl?: string }> = [],
 ) => {
   try {
+    if (request.method === "GET" && url.pathname === "/api/guild/channels") {
+      if (!activeGuildId) {
+        json(response, 200, { channels: [] });
+        return true;
+      }
+
+      json(response, 200, { channels: await botGuildTextChannels(activeGuildId) });
+      return true;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/dashboard") {
       const guildIds = sharedServers.map((server) => server.id);
       const events = guildIds.length

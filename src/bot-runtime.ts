@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { ChannelType, Client, Events, GatewayIntentBits, PermissionFlagsBits } from "discord.js";
 import { isDiscordConfigured, type DiscordSettings } from "./config.js";
 import { prisma } from "./db.js";
 import { handleButton } from "./interactions/buttons.js";
@@ -9,6 +9,7 @@ import type { AuthenticatedUser } from "./auth.js";
 let client: Client | undefined;
 let stopScheduler: (() => void) | undefined;
 let activeToken: string | undefined;
+let connectedAt: number | undefined;
 
 const withTimeout = async <T>(task: Promise<T>, milliseconds: number) => {
   let timeout: NodeJS.Timeout | undefined;
@@ -26,15 +27,13 @@ const withTimeout = async <T>(task: Promise<T>, milliseconds: number) => {
   }
 };
 
-export const botStatus = (settings?: DiscordSettings) => ({
+export const botStatus = () => ({
   configured: Boolean(activeToken),
   connected: Boolean(client?.isReady()),
   userTag: client?.isReady() ? client.user.tag : undefined,
+  userId: client?.isReady() ? client.user.id : undefined,
   guildCount: client?.isReady() ? client.guilds.cache.size : 0,
-  inConfiguredGuild:
-    client?.isReady() && settings?.discordGuildId
-      ? client.guilds.cache.has(settings.discordGuildId)
-      : undefined,
+  uptimeSeconds: client?.isReady() && connectedAt ? Math.floor((Date.now() - connectedAt) / 1000) : undefined,
 });
 
 export const botGuilds = () => {
@@ -118,12 +117,53 @@ export const botGuildPermissionOptions = async (guildId: string) => {
   return { roles, users, userListAvailable: Boolean(members) };
 };
 
+const outputChannelTypes = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement]);
+
+export const botGuildTextChannels = async (guildId: string) => {
+  const readyClient = client;
+  if (!readyClient?.isReady() || !readyClient.user) {
+    return [];
+  }
+
+  const guild = readyClient.guilds.cache.get(guildId);
+  if (!guild) {
+    return [];
+  }
+
+  const fetchedChannels = await withTimeout(guild.channels.fetch().catch(() => null), 1_500);
+  const channels = fetchedChannels ?? guild.channels.cache;
+
+  const availableChannels: Array<{ id: string; name: string; type: string }> = [];
+  for (const channel of channels.values()) {
+    if (!channel || !outputChannelTypes.has(channel.type)) {
+      continue;
+    }
+
+    const permissions = channel.permissionsFor(guild.members.me ?? readyClient.user.id);
+    if (
+      !permissions?.has(PermissionFlagsBits.ViewChannel) ||
+      !permissions.has(PermissionFlagsBits.SendMessages)
+    ) {
+      continue;
+    }
+
+    availableChannels.push({
+      id: channel.id,
+      name: channel.name,
+      type: ChannelType[channel.type] ?? String(channel.type),
+    });
+  }
+
+  return availableChannels.sort((a, b) => a.name.localeCompare(b.name));
+};
+
 export const stopBot = async () => {
   stopScheduler?.();
   stopScheduler = undefined;
   client?.destroy();
   client = undefined;
   activeToken = undefined;
+  connectedAt = undefined;
 };
 
 export const startBot = async (settings: DiscordSettings) => {
@@ -143,6 +183,7 @@ export const startBot = async (settings: DiscordSettings) => {
   });
 
   nextClient.once(Events.ClientReady, (readyClient) => {
+    connectedAt = Date.now();
     console.log(`Logged in as ${readyClient.user.tag}.`);
     stopScheduler = startLootScheduler(readyClient);
   });

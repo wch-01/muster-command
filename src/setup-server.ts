@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { envConfig, isDiscordConfigured, type DiscordSettings } from "./config.js";
-import { registerGlobalCommands, registerTestGuildCommands } from "./discord/register-commands.js";
+import { registerGlobalCommands, registerGuildCommands } from "./discord/register-commands.js";
 import {
   botGuildMemberProfile,
   botGuildPermissionOptions,
@@ -35,6 +35,23 @@ const escapeHtml = (value: string | undefined) => {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+};
+
+const formatDuration = (seconds: number | undefined) => {
+  if (seconds === undefined) {
+    return "Not connected";
+  }
+
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const parts = [
+    days ? `${days}d` : "",
+    hours ? `${hours}h` : "",
+    minutes ? `${minutes}m` : "",
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" ") : "<1m";
 };
 
 const webAppRoot = join(process.cwd(), "public", "browser");
@@ -143,31 +160,11 @@ const readRequestBody = async (request: import("node:http").IncomingMessage) => 
   return Buffer.concat(chunks).toString("utf8");
 };
 
-const normalizeHost = (host: string | undefined) => {
-  const value = (host ?? "").toLowerCase();
-  if (value.startsWith("[")) {
-    return value.slice(1, value.indexOf("]"));
-  }
-
-  return value.replace(/:\d+$/, "");
-};
-
-const isAdminRequestAllowed = (request: import("node:http").IncomingMessage) => {
-  const host = normalizeHost(request.headers.host);
-  const allowedHosts = envConfig.ADMIN_ALLOWED_HOSTS.split(",").map((value) =>
-    normalizeHost(value.trim()),
-  );
-
-  return allowedHosts.includes(host);
-};
-
-const canSeeSuperAdminLink = (
-  request: import("node:http").IncomingMessage,
+const canSeeSystemAdminLink = (
   settings: DiscordSettings,
   user: AuthenticatedUser | undefined,
 ) => {
-  const adminUserIds = authConfig(settings).adminUserIds;
-  return isAdminUser(settings, user) || (!adminUserIds.length && isAdminRequestAllowed(request));
+  return isAdminUser(settings, user);
 };
 
 type SharedServer = {
@@ -226,6 +223,7 @@ const sessionPayload = async (
       avatar: user.avatar,
     },
     isSuperAdmin: isAdminUser(settings, user),
+    state: envConfig.STATE,
     botInviteUrl: inviteUrl(settings.discordClientId),
     activeServer: active,
     servers,
@@ -240,24 +238,19 @@ const requireAdminAccess = (
   user: AuthenticatedUser | undefined,
 ) => {
   const adminUserIds = authConfig(settings).adminUserIds;
-  if (adminUserIds.length && isAdminUser(settings, user)) {
+  if (!adminUserIds.length) {
+    throw new Error("System Admin requires ADMIN_DISCORD_USER_IDS in the environment file.");
+  }
+
+  if (isAdminUser(settings, user)) {
     return;
   }
 
-  if (!adminUserIds.length && isAdminRequestAllowed(request)) {
-    return;
-  }
-
-  if (adminUserIds.length) {
-    throw new Error("Admin access is only available to the configured Discord admin user.");
-  }
-
-  const host = request.headers.host ?? "unknown host";
-  throw new Error(`Admin access is not allowed from ${host}. Use localhost or Tailscale.`);
+  throw new Error("System Admin access is only available to the configured Discord admin user.");
 };
 
 const renderTopMenu = (
-  active: "dashboard" | "app" | "commands" | "admin" | "super-admin",
+  active: "dashboard" | "app" | "commands" | "admin" | "system-admin",
   settings: DiscordSettings,
   user: AuthenticatedUser | undefined,
   showSuperAdmin: boolean,
@@ -270,6 +263,7 @@ const renderTopMenu = (
 
   return `<header class="top-menu">
     <a class="brand" href="/app/dashboard">Muster Command</a>
+    ${envConfig.STATE === "development" ? `<span class="env-badge">Dev</span>` : ""}
     <nav aria-label="Primary navigation">
       ${item("/app/dashboard", "Dashboard", "dashboard")}
       <div class="menu-group">
@@ -283,7 +277,7 @@ const renderTopMenu = (
       ${item("/slash-commands", "Bot Commands", "commands")}
       <a href="/app/templates">Templates</a>
       ${item("/admin", "Admin", "admin")}
-      ${showSuperAdmin ? item("/super-admin", "Super Admin", "super-admin") : ""}
+      ${showSuperAdmin ? item("/system-admin", "System Admin", "system-admin") : ""}
     </nav>
     <div class="user-menu">
       ${`<form class="server-select" method="post" action="/active-server">
@@ -334,6 +328,17 @@ const renderPageStyles = () => `<style>
         font-weight: 700;
         text-decoration: none;
         white-space: nowrap;
+      }
+      .env-badge {
+        border: 1px solid #f59e0b;
+        border-radius: 999px;
+        background: #fffbeb;
+        color: #92400e;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1;
+        padding: 5px 8px;
+        text-transform: uppercase;
       }
       nav {
         display: flex;
@@ -458,11 +463,32 @@ const renderPageStyles = () => `<style>
         padding: 12px;
         background: #f8fafc;
       }
+      .stat-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
       .stat strong {
         display: block;
         font-size: 13px;
         color: #64748b;
         margin-bottom: 4px;
+      }
+      .stat-heading strong {
+        margin-bottom: 0;
+      }
+      .link-button {
+        border: 0;
+        background: transparent;
+        color: #1d4ed8;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 0;
+        text-decoration: underline;
       }
       .badge {
         border-radius: 999px;
@@ -636,6 +662,59 @@ const renderPageStyles = () => `<style>
         overflow-x: auto;
         padding: 12px;
       }
+      .modal-backdrop {
+        align-items: center;
+        background: rgba(15, 23, 42, 0.48);
+        display: none;
+        inset: 0;
+        justify-content: center;
+        padding: 24px;
+        position: fixed;
+        z-index: 30;
+      }
+      .modal-backdrop[aria-hidden="false"] {
+        display: flex;
+      }
+      .modal-panel {
+        background: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+        max-height: min(680px, calc(100vh - 48px));
+        overflow: auto;
+        padding: 20px;
+        width: min(620px, 100%);
+      }
+      .modal-header {
+        align-items: center;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 14px;
+        padding-bottom: 12px;
+      }
+      .modal-header h2 {
+        margin: 0;
+      }
+      .server-list {
+        display: grid;
+        gap: 8px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .server-list li {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        display: grid;
+        gap: 4px;
+        margin: 0;
+        padding: 10px;
+      }
+      .server-list code {
+        color: #64748b;
+        word-break: break-all;
+      }
       @media (max-width: 720px) {
         .top-menu {
           align-items: flex-start;
@@ -649,7 +728,7 @@ const renderPageStyles = () => `<style>
       }
     </style>`;
 
-const renderSuperAdminPage = (
+const renderSystemAdminPage = (
   settings: DiscordSettings,
   notice?: string,
   user?: AuthenticatedUser,
@@ -659,105 +738,80 @@ const renderSuperAdminPage = (
 ) => {
   const configured = isDiscordConfigured(settings);
   const loginConfigured = isLoginConfigured(settings);
-  const status = botStatus(settings);
+  const status = botStatus();
+  const installedGuilds = botGuilds();
   const badge = configured ? "Configured" : "Not configured";
   const badgeClass = configured ? "ok" : "warn";
   const connection = status.connected ? `Connected as ${status.userTag}` : "Not connected";
   const installedServers = status.connected
     ? `${status.guildCount} installed server${status.guildCount === 1 ? "" : "s"}`
     : "Installed server count unavailable";
-  const guildBadge =
-    status.inConfiguredGuild === undefined
-      ? undefined
-      : status.inConfiguredGuild
-        ? "In selected server"
-        : "Not in selected server";
-  const guildBadgeClass = status.inConfiguredGuild ? "ok" : "warn";
-  const generatedInviteUrl = inviteUrl(settings.discordClientId);
-  const adminIdsConfigured = authConfig(settings).adminUserIds.length > 0;
+  const botUser = status.userTag
+    ? `${status.userTag}${status.userId ? ` (${status.userId})` : ""}`
+    : "Not connected";
 
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Super Admin</title>
+    <title>System Admin</title>
     ${renderPageStyles()}
   </head>
   <body>
-    ${renderTopMenu("super-admin", settings, user, showSuperAdmin, activeServer, servers)}
+    ${renderTopMenu("system-admin", settings, user, showSuperAdmin, activeServer, servers)}
     <div class="page-wrap">
     <main>
-      <h1>Super Admin</h1>
+      <h1>System Admin</h1>
       ${notice ? `<p class="notice">${escapeHtml(notice)}</p>` : ""}
       <div class="status">
         <span class="badge ${badgeClass}">${badge}</span>
         <span class="badge neutral">${escapeHtml(connection)}</span>
-        ${guildBadge ? `<span class="badge ${guildBadgeClass}">${guildBadge}</span>` : ""}
       </div>
       <div class="stats">
-        <div class="stat"><strong>Installed Servers</strong>${escapeHtml(installedServers)}</div>
-        <div class="stat"><strong>Command Mode</strong>Test server for fast updates, global for public servers</div>
-        <div class="stat"><strong>Invite</strong>${generatedInviteUrl ? `<a href="/admin">Available on Admin</a>` : "Save Application ID first"}</div>
-        <div class="stat"><strong>Discord Login</strong>${loginConfigured ? "Configured" : "Needs Client Secret"}</div>
-        <div class="stat"><strong>Signed In</strong>${user ? escapeHtml(user.globalName ?? user.username) : "Bootstrap mode"}</div>
-        <div class="stat"><strong>Admin Lock</strong>${adminIdsConfigured ? "Discord user ID required" : "Local/Tailscale bootstrap"}</div>
-      </div>
-      <form method="post" action="/settings">
-        <label for="discordClientId">Application ID</label>
-        <input id="discordClientId" name="discordClientId" type="text" value="${escapeHtml(settings.discordClientId)}" autocomplete="off" />
-        <p class="hint">Developer Portal path: your app -> General Information -> Application ID.</p>
-
-        <label for="discordClientSecret">Client secret</label>
-        <input id="discordClientSecret" name="discordClientSecret" type="password" autocomplete="off" placeholder="${settings.discordClientSecret ? "Client secret saved - leave blank to keep it" : "Paste OAuth2 client secret"}" />
-        <p class="hint">Developer Portal path: your app -> OAuth2 -> General -> Client Secret. Add <code>${escapeHtml("http://localhost:3000/auth/discord/callback")}</code> as a redirect while testing locally.</p>
-
-        <label for="discordToken">Bot token</label>
-        <input id="discordToken" name="discordToken" type="password" autocomplete="off" placeholder="${settings.discordToken ? "Token saved - leave blank to keep it" : "Paste bot token"}" />
-        <p class="hint">Developer Portal path: your app -> Bot -> Token -> Reset Token or View Token. The saved token is never shown again.</p>
-
-        <label for="discordGuildId">Discord server ID</label>
-        <input id="discordGuildId" name="discordGuildId" type="text" value="${escapeHtml(settings.discordGuildId)}" autocomplete="off" />
-        <p class="hint">Discord path: enable Developer Mode, left click your server icon, then use Copy Server ID at the end of the menu.</p>
-
-        <label for="adminDiscordUserIds">Admin Discord user ID</label>
-        <input id="adminDiscordUserIds" name="adminDiscordUserIds" type="text" value="${escapeHtml(settings.adminDiscordUserIds)}" autocomplete="off" />
-        <p class="hint">Discord path: enable Developer Mode, left click your user profile, then use Copy User ID at the end of the menu. Separate multiple admin IDs with commas.</p>
-
-        <div class="actions">
-          <button type="submit">Save settings</button>
-          <label class="checkbox">
-            <input type="checkbox" name="registerCommands" value="yes" checked />
-            Register slash commands to test server after saving
-          </label>
+        <div class="stat">
+          <div class="stat-heading">
+            <strong>Installed Servers</strong>
+            <button class="link-button" type="button" onclick="openInstalledServersModal()">View servers</button>
+          </div>
+          ${escapeHtml(installedServers)}
         </div>
-      </form>
+        <div class="stat"><strong>Bot User</strong>${escapeHtml(botUser)}</div>
+        <div class="stat"><strong>Uptime</strong>${escapeHtml(formatDuration(status.uptimeSeconds))}</div>
+        <div class="stat"><strong>Signed In</strong>${user ? escapeHtml(user.globalName ?? user.username) : "Discord login required"}</div>
+      </div>
       <div class="actions" aria-label="Command registration">
         <form method="post" action="/register-test">
-          <button class="secondary" type="submit">Register commands to test server</button>
+          <button class="secondary" type="submit" ${activeServer ? "" : "disabled"}>Register commands to selected server</button>
         </form>
         <form method="post" action="/register-global">
           <button type="submit">Register commands globally</button>
         </form>
       </div>
-      ${
-        generatedInviteUrl
-          ? `<section class="invite" aria-label="Invite bot">
-              <strong>Bot not in your server yet?</strong>
-              <p>Open this invite link, choose your server, and approve the requested scopes and permissions.</p>
-              <p><a href="${escapeHtml(generatedInviteUrl)}" target="_blank" rel="noreferrer">Invite this bot to Discord</a></p>
-            </section>`
-          : `<section class="invite" aria-label="Invite bot">
-              <strong>Bot not in your server yet?</strong>
-              <p>Save your Application ID first, then this page will show an invite link.</p>
-            </section>`
-      }
-      <p class="quick-links"><a href="/admin" target="_blank" rel="noreferrer">Open server admin page</a> | <a href="/slash-commands" target="_blank" rel="noreferrer">Open bot command reference</a></p>
+      <div class="modal-backdrop" id="installedServersModal" aria-hidden="true" role="presentation" onclick="closeInstalledServersModal(event)">
+        <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="installedServersTitle">
+          <div class="modal-header">
+            <h2 id="installedServersTitle">Installed Servers</h2>
+            <button class="secondary" type="button" onclick="closeInstalledServersModal()">Close</button>
+          </div>
+          ${
+            installedGuilds.length
+              ? `<ul class="server-list">
+                  ${installedGuilds
+                    .map((server) => `<li><strong>${escapeHtml(server.name)}</strong><code>${escapeHtml(server.id)}</code></li>`)
+                    .join("")}
+                </ul>`
+              : `<p class="muted">The bot is not connected to any servers.</p>`
+          }
+        </section>
+      </div>
       <section class="help" aria-label="Discord setup help">
         <h2>Discord Developer Portal fields</h2>
         <ul>
-          <li><strong>Bot token:</strong> your app -> <code>Bot</code> -> <code>Token</code>. Keep this private.</li>
-          <li><strong>Application ID:</strong> your app -> <code>General Information</code> -> <code>Application ID</code>.</li>
+          <li><strong>Bot token:</strong> your app -> <code>Bot</code> -> <code>Token</code>. Save as <code>DISCORD_BOT_TOKEN</code> in the environment file.</li>
+          <li><strong>Application ID:</strong> your app -> <code>General Information</code> -> <code>Application ID</code>. Save as <code>APPLICATION_ID</code>.</li>
+          <li><strong>Client Secret:</strong> your app -> <code>OAuth2</code> -> <code>General</code> -> <code>Client Secret</code>. Save as <code>DISCORD_CLIENT_SECRET</code>.</li>
+          <li><strong>Admin Discord user ID:</strong> Discord Developer Mode -> left click your user profile -> Copy User ID. Save as <code>ADMIN_DISCORD_USER_IDS</code>.</li>
           <li><strong>Public Key:</strong> not needed for this bot.</li>
         </ul>
 
@@ -786,6 +840,23 @@ const renderSuperAdminPage = (
       </section>
     </main>
     </div>
+    <script>
+      const installedServersModal = document.getElementById("installedServersModal");
+      const openInstalledServersModal = () => {
+        installedServersModal?.setAttribute("aria-hidden", "false");
+      };
+      const closeInstalledServersModal = (event) => {
+        if (event && event.target !== installedServersModal) {
+          return;
+        }
+        installedServersModal?.setAttribute("aria-hidden", "true");
+      };
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeInstalledServersModal();
+        }
+      });
+    </script>
   </body>
 </html>`;
 };
@@ -885,8 +956,14 @@ const renderAdminPage = async (
 
             <div class="form-grid">
               <div>
-                <label for="eventOutputChannelId">Channel ID</label>
-                <input id="eventOutputChannelId" name="eventOutputChannelId" type="text" value="${escapeHtml(settings.eventOutputChannelId)}" autocomplete="off" />
+                <label for="eventOutputChannelId">Event output channel</label>
+                <select id="eventOutputChannelId" name="eventOutputChannelId" data-selected-channel-id="${escapeHtml(settings.eventOutputChannelId)}">
+                  ${
+                    settings.eventOutputChannelId
+                      ? `<option value="${escapeHtml(settings.eventOutputChannelId)}" selected>Saved channel (${escapeHtml(settings.eventOutputChannelId)})</option>`
+                      : `<option value="" selected>Loading channels...</option>`
+                  }
+                </select>
                 <p class="hint" data-output-help="channel">Where event signup panels should be posted.</p>
                 <p class="hint" data-output-help="thread">Where event threads should be created.</p>
               </div>
@@ -949,6 +1026,61 @@ const renderAdminPage = async (
         });
       };
 
+      const renderChannelOptions = (select, channels) => {
+        const selectedChannelId = select.dataset.selectedChannelId ?? "";
+        select.replaceChildren();
+
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = channels.length ? "Select a channel" : "No eligible text channels found";
+        select.append(placeholder);
+
+        let selectedChannelExists = false;
+        channels.forEach((channel) => {
+          const option = document.createElement("option");
+          option.value = channel.id;
+          option.textContent = "#" + channel.name;
+          option.dataset.channelType = channel.type;
+          if (channel.id === selectedChannelId) {
+            option.selected = true;
+            selectedChannelExists = true;
+          }
+          select.append(option);
+        });
+
+        if (selectedChannelId && !selectedChannelExists) {
+          const savedOption = document.createElement("option");
+          savedOption.value = selectedChannelId;
+          savedOption.textContent = "Saved channel (" + selectedChannelId + ")";
+          savedOption.selected = true;
+          select.append(savedOption);
+        }
+      };
+
+      const loadChannelSelectors = async () => {
+        const eventChannelSelect = document.getElementById("eventOutputChannelId");
+        if (!eventChannelSelect) {
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/guild/channels", {
+            headers: { accept: "application/json" },
+          });
+          const data = await response.json();
+          renderChannelOptions(eventChannelSelect, Array.isArray(data.channels) ? data.channels : []);
+        } catch (error) {
+          eventChannelSelect.replaceChildren();
+          const option = document.createElement("option");
+          option.value = eventChannelSelect.dataset.selectedChannelId ?? "";
+          option.textContent = option.value
+            ? "Saved channel (" + option.value + ")"
+            : "Could not load channels";
+          option.selected = true;
+          eventChannelSelect.append(option);
+        }
+      };
+
       const createUserFieldRow = (name) => {
         const row = document.createElement("div");
         row.className = "user-field-row";
@@ -994,6 +1126,7 @@ const renderAdminPage = async (
       window.removeUserField = removeUserField;
 
       updateOutputFields();
+      loadChannelSelectors();
     </script>
   </body>
 </html>`;
@@ -1145,12 +1278,6 @@ export const startSetupServer = async () => {
         return;
       }
 
-      if (request.method === "GET" && url.pathname === "/settings") {
-        response.writeHead(302, { location: "/super-admin" });
-        response.end();
-        return;
-      }
-
       if (request.method === "POST" && url.pathname === "/active-server") {
         const user = requireAuthenticatedUser(request, response, request.headers.referer ?? "/app");
         if (!user) {
@@ -1252,7 +1379,7 @@ export const startSetupServer = async () => {
           await renderAdminPage(
             settings,
             user,
-            canSeeSuperAdminLink(request, settings, user),
+            canSeeSystemAdminLink(settings, user),
             active,
             servers,
           ),
@@ -1260,26 +1387,21 @@ export const startSetupServer = async () => {
         return;
       }
 
-      if (request.method === "GET" && url.pathname === "/super-admin") {
-        const user =
-          isLoginConfigured(settings) || authConfig(settings).adminUserIds.length
-            ? requireAuthenticatedUser(request, response, request.url ?? "/super-admin")
-            : getSessionUser(request);
-        if ((isLoginConfigured(settings) || authConfig(settings).adminUserIds.length) && !user) {
+      if (request.method === "GET" && url.pathname === "/system-admin") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/system-admin");
+        if (!user) {
           return;
         }
 
         requireAdminAccess(request, settings, user);
-        const activeInfo = user
-          ? await activeServerForRequest(request, user)
-          : { active: undefined, servers: [] };
+        const activeInfo = await activeServerForRequest(request, user);
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
-          renderSuperAdminPage(
+          renderSystemAdminPage(
             settings,
             undefined,
             user,
-            canSeeSuperAdminLink(request, settings, user),
+            canSeeSystemAdminLink(settings, user),
             activeInfo.active,
             activeInfo.servers,
           ),
@@ -1324,7 +1446,7 @@ export const startSetupServer = async () => {
           await renderAdminPage(
             nextSettings,
             user,
-            canSeeSuperAdminLink(request, nextSettings, user),
+            canSeeSystemAdminLink(nextSettings, user),
             active,
             servers,
             "Admin settings saved.",
@@ -1352,7 +1474,7 @@ export const startSetupServer = async () => {
           renderCommandsPage(
             settings,
             user,
-            canSeeSuperAdminLink(request, settings, user),
+            canSeeSystemAdminLink(settings, user),
             commands,
             active,
             servers,
@@ -1361,84 +1483,51 @@ export const startSetupServer = async () => {
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/settings") {
-        const existing = settings;
-        const user =
-          isLoginConfigured(existing) || authConfig(existing).adminUserIds.length
-            ? requireAuthenticatedUser(request, response, request.url ?? "/admin")
-            : getSessionUser(request);
-        if (isLoginConfigured(existing) || authConfig(existing).adminUserIds.length) {
-          if (!user) {
-            return;
-          }
-        }
-
-        requireAdminAccess(request, existing, user);
-        const body = new URLSearchParams(await readRequestBody(request));
-        const nextSettings = await saveSettings(
-          {
-            discordToken: body.get("discordToken") ?? undefined,
-            discordClientId: body.get("discordClientId") ?? undefined,
-            discordClientSecret: body.get("discordClientSecret") ?? undefined,
-            discordGuildId: body.get("discordGuildId") ?? undefined,
-            adminDiscordUserIds: body.get("adminDiscordUserIds") ?? undefined,
-          },
-          existing,
-        );
-
-        let notice = (await startBot(nextSettings)).message;
-        if (body.get("registerCommands") === "yes") {
-          const scope = await registerTestGuildCommands(nextSettings);
-          notice += ` Slash commands registered for ${scope}.`;
-        }
-
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          renderSuperAdminPage(
-            nextSettings,
-            notice,
-            user,
-            canSeeSuperAdminLink(request, nextSettings, user),
-          ),
-        );
-        return;
-      }
-
       if (request.method === "POST" && url.pathname === "/register-test") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/super-admin");
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/system-admin");
         if (!user) {
           return;
         }
 
         requireAdminAccess(request, settings, user);
-        const scope = await registerTestGuildCommands(settings);
+        const { active, servers } = await activeServerForRequest(request, user);
+        if (!active) {
+          throw new Error("Select a shared server before registering commands.");
+        }
+
+        const scope = await registerGuildCommands(settings, active.id);
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
-          renderSuperAdminPage(
+          renderSystemAdminPage(
             settings,
             `Slash commands registered for ${scope}.`,
             user,
-            canSeeSuperAdminLink(request, settings, user),
+            canSeeSystemAdminLink(settings, user),
+            active,
+            servers,
           ),
         );
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/register-global") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/super-admin");
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/system-admin");
         if (!user) {
           return;
         }
 
         requireAdminAccess(request, settings, user);
+        const { active, servers } = await activeServerForRequest(request, user);
         const scope = await registerGlobalCommands(settings);
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
-          renderSuperAdminPage(
+          renderSystemAdminPage(
             settings,
             `Slash commands registered ${scope}.`,
             user,
-            canSeeSuperAdminLink(request, settings, user),
+            canSeeSystemAdminLink(settings, user),
+            active,
+            servers,
           ),
         );
         return;
@@ -1449,8 +1538,8 @@ export const startSetupServer = async () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong.";
       if (
-        message.startsWith("Admin access is not allowed") ||
-        message.startsWith("Admin access is only available")
+        message.startsWith("System Admin requires") ||
+        message.startsWith("System Admin access is only available")
       ) {
         response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
         response.end(message);
@@ -1459,7 +1548,7 @@ export const startSetupServer = async () => {
 
       response.writeHead(500, { "content-type": "text/html; charset=utf-8" });
       response.end(
-        renderSuperAdminPage(
+        renderSystemAdminPage(
           await loadSettings().catch(() => ({})),
           message,
           getSessionUser(request),
@@ -1473,6 +1562,6 @@ export const startSetupServer = async () => {
   });
 
   console.log(`App available at http://localhost:${envConfig.SETUP_PORT}/app`);
-  console.log(`Super Admin page available at http://localhost:${envConfig.SETUP_PORT}/super-admin`);
+  console.log(`System Admin page available at http://localhost:${envConfig.SETUP_PORT}/system-admin`);
   return server;
 };

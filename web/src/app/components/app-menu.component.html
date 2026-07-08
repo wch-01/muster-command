@@ -1,5 +1,6 @@
 <header class="top-menu">
   <a class="brand" href="/app/dashboard">Muster Command</a>
+  <span class="env-badge" *ngIf="state === 'development'">Dev</span>
   <nav aria-label="Primary navigation">
     <a [class.active]="active === 'dashboard'" href="/app/dashboard">Dashboard</a>
     <div class="menu-group" [class.active]="eventActive">
@@ -13,7 +14,7 @@
     <a [class.active]="active === 'commands'" href="/slash-commands">Bot Commands</a>
     <a [class.active]="active === 'templates'" href="/app/templates">Templates</a>
     <a [class.active]="active === 'admin'" href="/admin">Admin</a>
-    <a *ngIf="isSuperAdmin" [class.active]="active === 'super-admin'" href="/super-admin">Super Admin</a>
+    <a *ngIf="isSuperAdmin" [class.active]="active === 'system-admin'" href="/system-admin">System Admin</a>
   </nav>
   <div class="user-menu">
     <div class="server-select">
