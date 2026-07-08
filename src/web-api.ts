@@ -152,9 +152,56 @@ export const handleApiRequest = async (
   user?: AuthenticatedUser,
   activeGuildId?: string,
   activeGuildProfileName?: string,
+  sharedServers: Array<{ id: string; name: string; iconUrl?: string }> = [],
 ) => {
   try {
+    if (request.method === "GET" && url.pathname === "/api/dashboard") {
+      const guildIds = sharedServers.map((server) => server.id);
+      const events = guildIds.length
+        ? await prisma.event.findMany({
+            where: {
+              guildId: { in: guildIds },
+              status: "OPEN",
+            },
+            orderBy: [{ startsAt: "asc" }, { createdAt: "desc" }],
+            select: {
+              id: true,
+              guildId: true,
+              name: true,
+              startsAt: true,
+              status: true,
+              createdByName: true,
+            },
+          })
+        : [];
+
+      json(response, 200, {
+        servers: sharedServers.map((server) => {
+          const activeEvents = events.filter((event) => event.guildId === server.id);
+          return {
+            id: server.id,
+            name: server.name,
+            iconUrl: server.iconUrl,
+            activeEventCount: activeEvents.length,
+            activeEvents: activeEvents.slice(0, 5).map((event) => ({
+              id: event.id,
+              name: event.name,
+              startsAt: event.startsAt,
+              status: event.status,
+              createdByName: event.createdByName,
+            })),
+          };
+        }),
+      });
+      return true;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/events") {
+      if (!activeGuildId) {
+        json(response, 200, []);
+        return true;
+      }
+
       const status = url.searchParams.get("status");
       const mine = url.searchParams.get("mine") === "yes";
       const events = await prisma.event.findMany({

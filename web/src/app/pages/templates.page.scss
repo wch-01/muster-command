@@ -1,0 +1,21 @@
+:host {
+  display: block;
+}
+
+.templates-page {
+  display: grid;
+  gap: 18px;
+}
+
+.templates-page h1,
+.placeholder-panel h2 {
+  margin: 0;
+}
+
+.placeholder-panel {
+  max-width: 720px;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+}

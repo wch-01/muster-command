@@ -2,10 +2,7 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { envConfig, isDiscordConfigured, type DiscordSettings } from "./config.js";
-import {
-  registerGlobalCommands,
-  registerTestGuildCommands,
-} from "./discord/register-commands.js";
+import { registerGlobalCommands, registerTestGuildCommands } from "./discord/register-commands.js";
 import {
   botGuildMemberProfile,
   botGuildPermissionOptions,
@@ -96,6 +93,26 @@ const idSet = (value: string | undefined) =>
       .filter(Boolean),
   );
 
+const csvSet = (value: string | undefined) =>
+  new Set(
+    (value ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+
+const botInvitePermissions = [
+  1024n, // View Channels
+  2048n, // Send Messages
+  16384n, // Embed Links
+  65536n, // Read Message History
+  17179869184n, // Manage Threads
+  34359738368n, // Create Public Threads
+  68719476736n, // Create Private Threads
+  274877906944n, // Send Messages in Threads
+]
+  .reduce((total, flag) => total | flag, 0n)
+  .toString();
 const inviteUrl = (appId: string | undefined) => {
   if (!appId) {
     return undefined;
@@ -103,7 +120,7 @@ const inviteUrl = (appId: string | undefined) => {
 
   const params = new URLSearchParams({
     client_id: appId,
-    permissions: "84992",
+    permissions: botInvitePermissions,
     scope: "bot applications.commands",
   });
 
@@ -156,10 +173,13 @@ const canSeeSuperAdminLink = (
 type SharedServer = {
   id: string;
   name: string;
+  iconUrl?: string;
   userProfile?: Awaited<ReturnType<typeof botGuildMemberProfile>>;
 };
 
-const availableServersForUser = async (user: AuthenticatedUser | undefined): Promise<SharedServer[]> => {
+const availableServersForUser = async (
+  user: AuthenticatedUser | undefined,
+): Promise<SharedServer[]> => {
   const installed = botGuilds();
   const userGuilds = user?.guilds ?? [];
   const userGuildIds = new Set(userGuilds.map((guild) => guild.id));
@@ -206,6 +226,7 @@ const sessionPayload = async (
       avatar: user.avatar,
     },
     isSuperAdmin: isAdminUser(settings, user),
+    botInviteUrl: inviteUrl(settings.discordClientId),
     activeServer: active,
     servers,
     requiresServerSetup: servers.length === 0,
@@ -236,7 +257,7 @@ const requireAdminAccess = (
 };
 
 const renderTopMenu = (
-  active: "app" | "commands" | "admin" | "super-admin",
+  active: "dashboard" | "app" | "commands" | "admin" | "super-admin",
   settings: DiscordSettings,
   user: AuthenticatedUser | undefined,
   showSuperAdmin: boolean,
@@ -248,8 +269,9 @@ const renderTopMenu = (
   const profileName = activeServer?.userProfile?.displayName ?? user?.globalName ?? user?.username;
 
   return `<header class="top-menu">
-    <a class="brand" href="/app/active-events">Star Citizen Events</a>
+    <a class="brand" href="/app/dashboard">Muster Command</a>
     <nav aria-label="Primary navigation">
+      ${item("/app/dashboard", "Dashboard", "dashboard")}
       <div class="menu-group">
         <button type="button">Events</button>
         <div class="menu-dropdown">
@@ -258,15 +280,15 @@ const renderTopMenu = (
           <a href="/app/past-events">Past Events</a>
         </div>
       </div>
-      ${item("/slash-commands", "Commands", "commands")}
+      ${item("/slash-commands", "Bot Commands", "commands")}
+      <a href="/app/templates">Templates</a>
       ${item("/admin", "Admin", "admin")}
       ${showSuperAdmin ? item("/super-admin", "Super Admin", "super-admin") : ""}
     </nav>
     <div class="user-menu">
-      ${
-        `<form class="server-select" method="post" action="/active-server">
+      ${`<form class="server-select" method="post" action="/active-server">
                 <label for="activeGuildId">Active Server</label>
-                <select id="activeGuildId" name="guildId" onchange="this.form.submit()">
+                <select id="activeGuildId" name="guildId" onchange="if (this.value === '__invite') { window.location.href = '/bot-invite'; } else { this.form.submit(); }">
                   ${servers
                     .map(
                       (server) =>
@@ -274,9 +296,10 @@ const renderTopMenu = (
                     )
                     .join("")}
                   ${servers.length ? "" : `<option value="">No shared server</option>`}
+                  <option disabled>--------</option>
+                  <option value="__invite">+ Add bot to another server</option>
                 </select>
-              </form>`
-      }
+              </form>`}
         ${profileName ? `<span>${escapeHtml(profileName)}</span>` : ""}
       <a href="/logout">Log out</a>
     </div>
@@ -546,6 +569,29 @@ const renderPageStyles = () => `<style>
         display: block;
         color: #64748b;
       }
+      .user-field-list {
+        display: grid;
+        gap: 8px;
+      }
+      .user-field-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+      }
+      .user-field-row input {
+        margin: 0;
+      }
+      .user-field-row button,
+      .add-user-button {
+        padding: 10px 12px;
+      }
+      .user-field-row button {
+        background: #64748b;
+      }
+      .add-user-button {
+        margin-top: 10px;
+      }
       .permissions-grid {
         align-items: start;
       }
@@ -706,7 +752,7 @@ const renderSuperAdminPage = (
               <p>Save your Application ID first, then this page will show an invite link.</p>
             </section>`
       }
-      <p class="quick-links"><a href="/admin" target="_blank" rel="noreferrer">Open server admin page</a> | <a href="/slash-commands" target="_blank" rel="noreferrer">Open slash command reference</a></p>
+      <p class="quick-links"><a href="/admin" target="_blank" rel="noreferrer">Open server admin page</a> | <a href="/slash-commands" target="_blank" rel="noreferrer">Open bot command reference</a></p>
       <section class="help" aria-label="Discord setup help">
         <h2>Discord Developer Portal fields</h2>
         <ul>
@@ -727,6 +773,15 @@ const renderSuperAdminPage = (
           <li>Send Messages</li>
           <li>Embed Links</li>
           <li>Read Message History</li>
+          <li>Manage Threads</li>
+          <li>Create Public Threads</li>
+          <li>Create Private Threads</li>
+          <li>Send Messages in Threads</li>
+        </ul>
+
+        <h3>Privileged gateway intents</h3>
+        <ul>
+          <li>Enable <strong>Server Members Intent</strong> on the bot page so the admin user checkbox list can load.</li>
         </ul>
       </section>
     </main>
@@ -756,6 +811,23 @@ const renderCheckboxList = (
   </div>`;
 };
 
+const renderManualUserFieldList = (name: string, selected: Set<string>) => {
+  const values = [...selected];
+  const rows = values.length ? values : [""];
+
+  return `<div class="user-field-list" data-user-field-list="${escapeHtml(name)}">
+    ${rows
+      .map(
+        (value) => `<div class="user-field-row" data-user-field-row>
+          <input name="${escapeHtml(name)}" type="text" value="${escapeHtml(value)}" autocomplete="off" placeholder="User name or Discord user ID" aria-label="Template manager user" />
+          <button type="button" onclick="removeUserField(this)">Remove</button>
+        </div>`,
+      )
+      .join("")}
+  </div>
+  <button class="secondary add-user-button" type="button" data-user-field-name="${escapeHtml(name)}" onclick="addUserField(this.dataset.userFieldName)">+ Add user</button>`;
+};
+
 const renderAdminPage = async (
   settings: DiscordSettings,
   user: AuthenticatedUser | undefined,
@@ -771,7 +843,7 @@ const renderAdminPage = async (
     ? await botGuildPermissionOptions(activeServer.id)
     : { roles: [], users: [], userListAvailable: false };
   const selectedTemplateRoles = idSet(settings.templateControlRoleIds);
-  const selectedTemplateUsers = idSet(settings.templateControlUserIds);
+  const selectedTemplateUsers = csvSet(settings.templateControlUserIds);
 
   return `<!doctype html>
 <html lang="en">
@@ -790,22 +862,15 @@ const renderAdminPage = async (
         <p class="muted">Manage how this server uses the bot.</p>
 
         <section class="panel">
-          <h2>Invite Bot</h2>
-          <p>Add the hosted bot to your Discord server to create Star Citizen event signups and participant-only loot pools.</p>
+          <h2>Bot Status</h2>
+          <p>${activeServer ? `Muster is installed on ${escapeHtml(activeServer.name)}.` : "No active server selected."}</p>
           ${
-            generatedInviteUrl
-              ? `<p><a class="button" href="${escapeHtml(generatedInviteUrl)}" target="_blank" rel="noreferrer">Invite bot to your server</a></p>`
-              : `<p class="notice">The bot owner needs to configure the Application ID on Super Admin before this invite link can be generated.</p>`
+            generatedInviteUrl && activeServer
+              ? `<p><a class="button secondary" href="${escapeHtml(generatedInviteUrl)}" target="_blank" rel="noreferrer">Re-authorize / Update permissions</a></p>`
+              : activeServer
+                ? `<p class="muted">Application ID is needed before permission update links can be generated.</p>`
+                : `<p class="muted">Use Dashboard to add the bot to a server or select a shared server.</p>`
           }
-          <h3>Discord will ask for</h3>
-          <ul>
-            <li><code>bot</code> scope</li>
-            <li><code>applications.commands</code> scope</li>
-            <li>View Channels</li>
-            <li>Send Messages</li>
-            <li>Embed Links</li>
-            <li>Read Message History</li>
-          </ul>
         </section>
 
         <section class="panel">
@@ -848,18 +913,21 @@ const renderAdminPage = async (
                 <h3>Template manager users</h3>
                 ${
                   permissionOptions.userListAvailable
-                    ? renderCheckboxList("templateControlUserIds", permissionOptions.users, selectedTemplateUsers)
+                    ? renderCheckboxList(
+                        "templateControlUserIds",
+                        permissionOptions.users,
+                        selectedTemplateUsers,
+                      )
                     : `<p class="notice">Discord did not return the server member list. Enable the bot's Server Members Intent in the Discord Developer Portal if you want user checkboxes here.</p>
-                      ${[...selectedTemplateUsers]
-                        .map((id) => `<input type="hidden" name="templateControlUserIds" value="${escapeHtml(id)}" />`)
-                        .join("")}`
+                      <p class="hint">Add one user per field. Use the plus button for another user and Remove to delete a field.</p>
+                      ${renderManualUserFieldList("templateControlUserIds", selectedTemplateUsers)}`
                 }
               </div>
             </div>
 
             <div class="actions">
               <button type="submit">Save Admin Settings</button>
-              <a class="button secondary" href="/slash-commands" target="_blank" rel="noreferrer">Commands</a>
+              <a class="button secondary" href="/slash-commands" target="_blank" rel="noreferrer">Bot Commands</a>
             </div>
           </form>
         </section>
@@ -880,6 +948,51 @@ const renderAdminPage = async (
           field.hidden = field.getAttribute("data-output-help") !== mode;
         });
       };
+
+      const createUserFieldRow = (name) => {
+        const row = document.createElement("div");
+        row.className = "user-field-row";
+        row.setAttribute("data-user-field-row", "");
+
+        const input = document.createElement("input");
+        input.name = name;
+        input.type = "text";
+        input.autocomplete = "off";
+        input.placeholder = "User name or Discord user ID";
+        input.setAttribute("aria-label", "Template manager user");
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.textContent = "Remove";
+        removeButton.addEventListener("click", () => removeUserField(removeButton));
+
+        row.append(input, removeButton);
+        return row;
+      };
+
+      const addUserField = (name) => {
+        const list = name ? document.querySelector('[data-user-field-list="' + name + '"]') : undefined;
+        if (!list) {
+          return;
+        }
+        const row = createUserFieldRow(name);
+        list.append(row);
+        row.querySelector("input")?.focus();
+      };
+
+      const removeUserField = (button) => {
+        const row = button.closest("[data-user-field-row]");
+        const list = row?.parentElement;
+        const name = list?.getAttribute("data-user-field-list") ?? "templateControlUserIds";
+        row?.remove();
+        if (list && !list.querySelector("[data-user-field-row]")) {
+          list.append(createUserFieldRow(name));
+        }
+      };
+
+      window.addUserField = addUserField;
+      window.removeUserField = removeUserField;
+
       updateOutputFields();
     </script>
   </body>
@@ -970,7 +1083,7 @@ const renderCommandsPage = (
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Commands</title>
+    <title>Bot Commands</title>
     ${renderPageStyles()}
   </head>
   <body>
@@ -990,13 +1103,22 @@ export const startSetupServer = async () => {
       if (request.method === "GET" && url.pathname === "/login") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
-          renderLoginPage(settings, getSessionUser(request), url.searchParams.get("returnTo") ?? "/app"),
+          renderLoginPage(
+            settings,
+            getSessionUser(request),
+            url.searchParams.get("returnTo") ?? "/app/dashboard",
+          ),
         );
         return;
       }
 
       if (request.method === "GET" && url.pathname === "/auth/discord") {
-        beginDiscordLogin(request, response, settings, url.searchParams.get("returnTo") ?? "/app");
+        beginDiscordLogin(
+          request,
+          response,
+          settings,
+          url.searchParams.get("returnTo") ?? "/app/dashboard",
+        );
         return;
       }
 
@@ -1011,7 +1133,14 @@ export const startSetupServer = async () => {
       }
 
       if (request.method === "GET" && url.pathname === "/") {
-        response.writeHead(302, { location: "/app/active-events" });
+        response.writeHead(302, { location: "/app/dashboard" });
+        response.end();
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/bot-invite") {
+        const target = inviteUrl(settings.discordClientId);
+        response.writeHead(302, { location: target ?? "/admin" });
         response.end();
         return;
       }
@@ -1028,7 +1157,7 @@ export const startSetupServer = async () => {
           return;
         }
 
-          const { servers } = await activeServerForRequest(request, user);
+        const { servers } = await activeServerForRequest(request, user);
         const body = new URLSearchParams(await readRequestBody(request));
         const guildId = body.get("guildId") ?? "";
         if (servers.some((server) => server.id === guildId)) {
@@ -1036,6 +1165,26 @@ export const startSetupServer = async () => {
         }
 
         response.writeHead(302, { location: request.headers.referer ?? "/app" });
+        response.end();
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/active-server") {
+        const user = requireAuthenticatedUser(request, response, request.url ?? "/app/dashboard");
+        if (!user) {
+          return;
+        }
+
+        const { servers } = await activeServerForRequest(request, user);
+        const guildId = url.searchParams.get("guildId") ?? "";
+        if (servers.some((server) => server.id === guildId)) {
+          setActiveGuild(request, guildId);
+        }
+
+        const returnTo = url.searchParams.get("returnTo");
+        response.writeHead(302, {
+          location: returnTo?.startsWith("/app/") ? returnTo : "/app/dashboard",
+        });
         response.end();
         return;
       }
@@ -1061,24 +1210,31 @@ export const startSetupServer = async () => {
           return;
         }
 
-        if (await handleApiRequest(request, response, url, user, activeGuildId, activeGuildProfileName)) {
+        if (
+          await handleApiRequest(
+            request,
+            response,
+            url,
+            user,
+            activeGuildId,
+            activeGuildProfileName,
+            payload.servers,
+          )
+        ) {
           return;
         }
       }
 
-      if (request.method === "GET" && (url.pathname === "/app" || url.pathname.startsWith("/app/"))) {
+      if (
+        request.method === "GET" &&
+        (url.pathname === "/app" || url.pathname.startsWith("/app/"))
+      ) {
         const user = requireAuthenticatedUser(request, response, request.url ?? "/app");
         if (!user) {
           return;
         }
 
         const payload = await sessionPayload(request, settings, user);
-        if (!payload.servers.length && !payload.requiresGuildReconnect) {
-          response.writeHead(302, { location: "/admin" });
-          response.end();
-          return;
-        }
-
         if (await serveWebApp(url, response, payload)) {
           return;
         }
@@ -1114,7 +1270,9 @@ export const startSetupServer = async () => {
         }
 
         requireAdminAccess(request, settings, user);
-        const activeInfo = user ? await activeServerForRequest(request, user) : { active: undefined, servers: [] };
+        const activeInfo = user
+          ? await activeServerForRequest(request, user)
+          : { active: undefined, servers: [] };
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(
           renderSuperAdminPage(
@@ -1141,12 +1299,21 @@ export const startSetupServer = async () => {
           {
             eventOutputMode: outputMode,
             eventOutputChannelId: body.get("eventOutputChannelId") ?? undefined,
-            lootOutputChannelId: outputMode === "channel" ? body.get("lootOutputChannelId") ?? undefined : undefined,
+            lootOutputChannelId:
+              outputMode === "channel" ? (body.get("lootOutputChannelId") ?? undefined) : undefined,
             threadAutoDeleteDays: Number.isInteger(cleanupDays)
               ? Math.min(Math.max(cleanupDays, 1), 30)
               : 7,
-            templateControlUserIds: body.getAll("templateControlUserIds").join(","),
-            templateControlRoleIds: body.getAll("templateControlRoleIds").join(","),
+            templateControlUserIds: body
+              .getAll("templateControlUserIds")
+              .map((value) => value.trim())
+              .filter(Boolean)
+              .join(","),
+            templateControlRoleIds: body
+              .getAll("templateControlRoleIds")
+              .map((value) => value.trim())
+              .filter(Boolean)
+              .join(","),
           },
           settings,
         );
