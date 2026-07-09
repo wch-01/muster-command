@@ -1,6 +1,6 @@
-<app-menu active="active-events" />
+<app-menu *ngIf="!modalMode" active="active-events" />
 
-<ion-content>
+<ion-content [class.modal-detail-content]="modalMode">
   <main class="page-shell event-detail" *ngIf="event; else loading">
     <section class="event-hero">
       <img *ngIf="event.logoUrl" class="event-logo" [src]="event.logoUrl" [alt]="event.name" />
@@ -10,18 +10,19 @@
           <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
         </div>
         <div class="toolbar-actions">
-          <ion-chip>{{ event.status }}</ion-chip>
           <ion-button color="secondary" (click)="lootOpen = true">Loot</ion-button>
           <ion-button *ngIf="event.isOwner" color="danger" fill="outline" (click)="endEvent()" [disabled]="event.status !== 'OPEN' || busyAction === 'end'">
             {{ busyAction === "end" ? "Ending..." : "End Event" }}
           </ion-button>
+          <span class="status-pill">{{ event.status }}</span>
+          <ion-button *ngIf="modalMode" fill="clear" color="medium" (click)="closeRequested.emit()">Close</ion-button>
         </div>
       </div>
       <p *ngIf="event.description">{{ event.description }}</p>
       <div class="event-meta">
         <span>Owner: {{ event.createdByName }}</span>
         <span>Event ID: {{ event.id }}</span>
-        <span>Loot window: {{ event.lootDurationHours }} hours</span>
+        <span>Loot Window: {{ event.lootDurationHours }} hours</span>
       </div>
       <p class="error-panel" *ngIf="error">{{ error }}</p>
     </section>
@@ -84,7 +85,7 @@
 </ion-content>
 
 <div class="modal-backdrop" *ngIf="lootOpen && event" (click)="lootOpen = false">
-  <section class="loot-modal" role="dialog" aria-modal="true" aria-label="Event loot" (click)="$event.stopPropagation()">
+  <section class="loot-modal" role="dialog" aria-modal="true" aria-label="Event Loot" (click)="$event.stopPropagation()">
     <header class="loot-header">
       <div>
         <h2>Loot for {{ event.name }}</h2>
@@ -92,7 +93,7 @@
         <p class="muted" *ngIf="!raffle?.endsAt">Loot timer starts when the event is ended.</p>
       </div>
       <div class="toolbar-actions">
-        <ion-badge *ngIf="event.isOwner" color="success">{{ bidProgress }} participants bid</ion-badge>
+        <ion-badge *ngIf="event.isOwner" color="success">{{ bidProgress }} Participants Bid</ion-badge>
         <ion-button *ngIf="event.isOwner" color="secondary" (click)="drawLoot()" [disabled]="raffle?.status === 'DRAWN'">
           Draw Loot
         </ion-button>
@@ -101,7 +102,7 @@
     </header>
 
     <section class="loot-add">
-      <ion-input label="Add loot items" labelPlacement="stacked" [(ngModel)]="newItems" placeholder="Gem, Armor, Weapon" />
+      <ion-input label="Add Loot Items" labelPlacement="stacked" [(ngModel)]="newItems" placeholder="Gem, Armor, Weapon" />
       <ion-button (click)="addLootItems()" [disabled]="!event.canAddLoot || !newItems.trim() || raffle?.status === 'DRAWN'">
         Add Loot
       </ion-button>

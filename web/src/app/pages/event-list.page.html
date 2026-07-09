@@ -1,37 +1,43 @@
 <app-menu [active]="mode === 'active' ? 'active-events' : 'past-events'" />
 
 <ion-content>
-  <main class="page-shell">
-    <div class="toolbar-actions">
-      <h1>{{ mode === "active" ? "Active Events" : "Past Events" }}</h1>
-    </div>
+  <main class="page-shell event-list-page">
+    <app-event-tabs [active]="mode === 'active' ? 'active-events' : 'past-events'" />
 
     <div class="error-panel" *ngIf="error">{{ error }}</div>
 
-    <article class="event-panel" *ngFor="let event of events">
-      <ng-container *ngIf="mode === 'active'; else pastEventTemplate">
-        <header class="event-list-row">
-          <div>
-            <h2>{{ event.name }}</h2>
-            <p class="muted">Owner: {{ event.createdByName }}</p>
-          </div>
-          <a class="mini-button primary" [href]="'/app/events/' + event.id">View</a>
-        </header>
-      </ng-container>
+    <article class="event-panel accordion-card" *ngFor="let event of events">
+      <div class="accordion-summary">
+        <button
+          class="accordion-toggle"
+          type="button"
+          (click)="toggleEvent(event.id)"
+          [attr.aria-expanded]="isExpanded(event.id)"
+        >
+          <span class="accordion-indicator">{{ isExpanded(event.id) ? "-" : "+" }}</span>
+          <span class="event-name">{{ event.name }}</span>
+          <span class="muted">Creator: {{ event.createdByName }}</span>
+          <span class="participant-pill">{{ participantCount(event) }} participants</span>
+        </button>
+        <div class="accordion-actions">
+          <button class="mini-button primary" type="button" (click)="openEvent(event.id)">View</button>
+          <button class="mini-button loot-button" type="button" (click)="openEvent(event.id, true)">Loot</button>
+        </div>
+      </div>
 
-      <ng-template #pastEventTemplate>
+      <section class="accordion-body" *ngIf="isExpanded(event.id)">
         <header>
           <div>
-            <h2>{{ event.name }}</h2>
             <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
+            <p *ngIf="event.description">{{ event.description }}</p>
           </div>
-          <a class="mini-button primary" [href]="'/app/events/' + event.id">View</a>
         </header>
-        <p *ngIf="event.description">{{ event.description }}</p>
+
         <div class="event-id-row">
           <code>{{ event.id }}</code>
-          <button class="mini-button" (click)="copyId(event.id)">Copy</button>
+          <button class="mini-button" type="button" (click)="copyId(event.id)">Copy</button>
         </div>
+
         <div class="slot-grid">
           <div class="slot-preview" *ngFor="let slot of event.slots">
             <strong>{{ slot.category }} - {{ slot.label }} ({{ slot.assignments.length }}/{{ slot.capacity }})</strong>
@@ -39,7 +45,7 @@
             <p class="muted" *ngFor="let open of openSlots(slot)">Open {{ open }}</p>
           </div>
         </div>
-      </ng-template>
+      </section>
     </article>
 
     <p class="muted" *ngIf="!events.length">
@@ -47,3 +53,14 @@
     </p>
   </main>
 </ion-content>
+
+<div class="event-modal-backdrop" *ngIf="selectedEventId" (click)="closeEventModal()">
+  <section class="event-modal" role="dialog" aria-modal="true" aria-label="Event details" (click)="$event.stopPropagation()">
+    <app-event-detail-page
+      [id]="selectedEventId"
+      [modalMode]="true"
+      [initialLootOpen]="selectedEventLootOpen"
+      (closeRequested)="closeEventModal()"
+    />
+  </section>
+</div>

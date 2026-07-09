@@ -250,7 +250,7 @@ const requireAdminAccess = (
 };
 
 const renderTopMenu = (
-  active: "dashboard" | "app" | "commands" | "admin" | "system-admin",
+  active: "dashboard" | "app" | "active-events" | "create-event" | "past-events" | "commands" | "templates" | "admin" | "system-admin",
   settings: DiscordSettings,
   user: AuthenticatedUser | undefined,
   showSuperAdmin: boolean,
@@ -259,6 +259,7 @@ const renderTopMenu = (
 ) => {
   const item = (href: string, label: string, key: typeof active) =>
     `<a class="${active === key ? "active" : ""}" href="${href}">${label}</a>`;
+  const eventActive = active === "active-events" || active === "create-event" || active === "past-events";
   const profileName = activeServer?.userProfile?.displayName ?? user?.globalName ?? user?.username;
 
   return `<header class="top-menu">
@@ -266,16 +267,9 @@ const renderTopMenu = (
     ${envConfig.STATE === "development" ? `<span class="env-badge">Dev</span>` : ""}
     <nav aria-label="Primary navigation">
       ${item("/app/dashboard", "Dashboard", "dashboard")}
-      <div class="menu-group">
-        <button type="button">Events</button>
-        <div class="menu-dropdown">
-          <a href="/app/active-events">Active Events</a>
-          <a href="/app/events">Create Event</a>
-          <a href="/app/past-events">Past Events</a>
-        </div>
-      </div>
+      <a class="${eventActive ? "active" : ""}" href="/app/active-events">Events</a>
       ${item("/slash-commands", "Bot Commands", "commands")}
-      <a href="/app/templates">Templates</a>
+      ${item("/app/templates", "Templates", "templates")}
       ${item("/admin", "Admin", "admin")}
       ${showSuperAdmin ? item("/system-admin", "System Admin", "system-admin") : ""}
     </nav>
@@ -348,8 +342,7 @@ const renderPageStyles = () => `<style>
         flex-wrap: wrap;
       }
       nav a,
-      .user-menu a,
-      .menu-group > button {
+      .user-menu a {
         border-radius: 6px;
         border: 0;
         background: transparent;
@@ -363,37 +356,6 @@ const renderPageStyles = () => `<style>
       nav a.active {
         color: #ffffff;
         background: #1f6feb;
-      }
-      .menu-group {
-        position: relative;
-      }
-      .menu-group > button {
-        display: block;
-      }
-      .menu-group:hover > button,
-      .menu-group:focus-within > button {
-        color: #ffffff;
-        background: #1f6feb;
-      }
-      .menu-dropdown {
-        display: none;
-        position: absolute;
-        z-index: 10;
-        top: 100%;
-        left: 0;
-        min-width: 170px;
-        padding: 6px;
-        background: #ffffff;
-        border: 1px solid #d7dde4;
-        border-radius: 8px;
-        box-shadow: 0 12px 30px rgba(16, 24, 40, 0.12);
-      }
-      .menu-dropdown a {
-        display: block;
-      }
-      .menu-group:hover .menu-dropdown,
-      .menu-group:focus-within .menu-dropdown {
-        display: block;
       }
       .user-menu {
         display: flex;

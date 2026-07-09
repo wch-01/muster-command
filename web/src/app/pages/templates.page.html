@@ -2,14 +2,166 @@
 
 <ion-content>
   <main class="page-shell templates-page">
-    <header>
-      <h1>Templates</h1>
-      <p class="muted">Template management is coming soon.</p>
+    <header class="templates-header">
+      <div>
+        <h1>Templates</h1>
+        <p class="muted">Reusable fleet and ground layouts for the selected server.</p>
+      </div>
+      <button class="primary-action" type="button" (click)="openCreateModal()">Create new template</button>
     </header>
 
-    <section class="placeholder-panel">
-      <h2>No templates yet</h2>
-      <p class="muted">This page will hold reusable event templates for ship groups, ground teams, roles, and extra crew settings.</p>
+    <div class="error-panel" *ngIf="error && !modalOpen">
+      {{ error }}
+      <button class="mini-button" type="button" (click)="loadTemplates()">Try again</button>
+    </div>
+    <p class="muted" *ngIf="loading">Loading templates...</p>
+
+    <section class="template-grid" *ngIf="!loading && templates.length">
+      <article class="template-card" *ngFor="let template of templates">
+        <div>
+          <h2>{{ template.name }}</h2>
+          <p class="muted">Made by {{ template.createdByName }}</p>
+        </div>
+        <dl>
+          <div>
+            <dt>Fleet slots</dt>
+            <dd>{{ slotCount(template, "ship") }}</dd>
+          </div>
+          <div>
+            <dt>Ground slots</dt>
+            <dd>{{ slotCount(template, "ground") }}</dd>
+          </div>
+        </dl>
+        <button class="mini-button primary" type="button" (click)="openTemplate(template)">View</button>
+      </article>
+    </section>
+
+    <section class="empty-state" *ngIf="!loading && !templates.length">
+      <h2>No templates created yet</h2>
+      <p class="muted">Create a server template to reuse a fleet and ground crew layout.</p>
+      <button class="primary-action" type="button" (click)="openCreateModal()">Create new template</button>
     </section>
   </main>
 </ion-content>
+
+<div class="modal-backdrop" *ngIf="modalOpen" (click)="closeModal()">
+  <section class="template-modal" (click)="$event.stopPropagation()">
+    <header class="modal-header">
+      <div>
+        <h2>{{ draft.id ? draft.name || "Template" : "Create Template" }}</h2>
+        <p class="muted" *ngIf="draft.createdByName">Made by {{ draft.createdByName }}</p>
+      </div>
+      <button class="icon-button" type="button" (click)="closeModal()" aria-label="Close">x</button>
+    </header>
+
+    <div class="modal-body">
+      <label class="field-label">
+        Template name
+        <input type="text" [(ngModel)]="draft.name" [disabled]="!editing" />
+      </label>
+
+      <section class="crew-builder">
+        <div class="builder-heading">
+          <h3>Fleet</h3>
+          <button class="mini-button primary" type="button" (click)="addShip()" [disabled]="!editing">Add ship</button>
+        </div>
+
+        <article class="builder-card" *ngFor="let ship of draft.ships; let shipIndex = index">
+          <header>
+            <h4>Ship {{ shipIndex + 1 }}</h4>
+            <button class="mini-button danger" type="button" (click)="removeShip(shipIndex)" [disabled]="!editing">Remove Ship</button>
+          </header>
+          <div class="builder-grid">
+            <label class="field-label">
+              Ship Type
+              <input type="text" [(ngModel)]="ship.name" [disabled]="!editing" />
+            </label>
+            <label class="field-label">
+              Crew Count
+              <input type="number" min="1" max="25" [(ngModel)]="ship.crewCount" [disabled]="!editing" />
+            </label>
+          </div>
+          <div class="role-row header-row">
+            <strong>Role</strong>
+            <strong>Slots</strong>
+            <span></span>
+          </div>
+          <div class="role-row" *ngFor="let role of ship.roles; let roleIndex = index">
+            <label class="field-label">
+              Role
+              <input type="text" [(ngModel)]="role.label" [disabled]="!editing" />
+            </label>
+            <label class="field-label">
+              Slots
+              <input type="number" min="1" max="25" [(ngModel)]="role.capacity" [disabled]="!editing" />
+            </label>
+            <button class="mini-button danger" type="button" (click)="removeRole(ship, roleIndex)" [disabled]="!editing">Remove</button>
+          </div>
+          <div class="builder-footer">
+            <span class="muted">Assigned Role Slots: {{ roleTotal(ship.roles) }} / Crew Count: {{ ship.crewCount }}</span>
+            <button class="mini-button" type="button" (click)="addRole(ship)" [disabled]="!editing">Add Role</button>
+          </div>
+        </article>
+
+        <p class="muted" *ngIf="!draft.ships.length">No ships added.</p>
+      </section>
+
+      <section class="crew-builder">
+        <div class="builder-heading">
+          <h3>Ground Teams</h3>
+          <button class="mini-button primary" type="button" (click)="addGroundTeam()" [disabled]="!editing">Add ground team</button>
+        </div>
+
+        <article class="builder-card" *ngFor="let team of draft.groundTeams; let teamIndex = index">
+          <header>
+            <h4>Ground Team {{ teamIndex + 1 }}</h4>
+            <button class="mini-button danger" type="button" (click)="removeGroundTeam(teamIndex)" [disabled]="!editing">Remove Team</button>
+          </header>
+          <div class="builder-grid">
+            <label class="field-label">
+              Team Name/Type
+              <input type="text" [(ngModel)]="team.name" [disabled]="!editing" />
+            </label>
+            <label class="field-label">
+              Crew Count
+              <input type="number" min="1" max="25" [(ngModel)]="team.crewCount" [disabled]="!editing" />
+            </label>
+          </div>
+          <div class="role-row header-row">
+            <strong>Role</strong>
+            <strong>Slots</strong>
+            <span></span>
+          </div>
+          <div class="role-row" *ngFor="let role of team.roles; let roleIndex = index">
+            <label class="field-label">
+              Role
+              <input type="text" [(ngModel)]="role.label" [disabled]="!editing" />
+            </label>
+            <label class="field-label">
+              Slots
+              <input type="number" min="1" max="25" [(ngModel)]="role.capacity" [disabled]="!editing" />
+            </label>
+            <button class="mini-button danger" type="button" (click)="removeRole(team, roleIndex)" [disabled]="!editing">Remove</button>
+          </div>
+          <div class="builder-footer">
+            <span class="muted">Assigned Role Slots: {{ roleTotal(team.roles) }} / Crew Count: {{ team.crewCount }}</span>
+            <button class="mini-button" type="button" (click)="addRole(team, 'Combat')" [disabled]="!editing">Add Role</button>
+          </div>
+        </article>
+
+        <p class="muted" *ngIf="!draft.groundTeams.length">No ground teams added.</p>
+      </section>
+
+      <div class="error-panel" *ngIf="error">{{ error }}</div>
+    </div>
+
+    <footer class="modal-actions">
+      <button class="mini-button danger" type="button" *ngIf="draft.id" (click)="deleteTemplate()" [disabled]="saving">Delete</button>
+      <span class="modal-spacer"></span>
+      <button class="mini-button" type="button" *ngIf="draft.id && !editing" (click)="editing = true">Edit</button>
+      <button class="mini-button primary" type="button" *ngIf="editing" (click)="saveTemplate()" [disabled]="saving || !draft.name.trim()">
+        {{ saving ? "Saving..." : "Save template" }}
+      </button>
+    </footer>
+  </section>
+</div>

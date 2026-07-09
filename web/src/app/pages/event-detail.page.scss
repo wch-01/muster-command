@@ -30,6 +30,10 @@
   flex-wrap: wrap;
 }
 
+.event-heading .toolbar-actions {
+  justify-content: flex-end;
+}
+
 .event-heading h1,
 .loot-header h2,
 .loot-item h3 {
@@ -44,10 +48,27 @@
   font-size: 14px;
 }
 
+.status-pill {
+  align-items: center;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #334155;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  min-height: 32px;
+  padding: 6px 10px;
+}
+
 .signup-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 14px;
+}
+
+.modal-detail-content .signup-layout {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .event-panel h2 {
@@ -62,7 +83,7 @@
 
 .slot-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(150px, 1.2fr) auto;
+  grid-template-columns: minmax(110px, 1fr) minmax(120px, 1.1fr) auto;
   align-items: center;
   gap: 10px;
   border: 1px solid #e2e8f0;
@@ -128,9 +149,20 @@
 }
 
 .loot-item header {
+  align-items: flex-start;
   display: flex;
   justify-content: space-between;
   gap: 8px;
+}
+
+.loot-item ion-badge {
+  align-items: center;
+  align-self: flex-start;
+  display: inline-flex;
+  line-height: 1;
+  min-height: 0;
+  padding: 4px 8px;
+  white-space: nowrap;
 }
 
 .winner {
@@ -144,12 +176,31 @@
   min-height: 300px;
 }
 
+.modal-detail-content {
+  --background: #f8fafc;
+}
+
+.modal-detail-content .page-shell {
+  padding: 0;
+  width: 100%;
+}
+
 @media (max-width: 720px) {
   .slot-row {
     grid-template-columns: 1fr;
   }
 
+  .modal-detail-content .signup-layout {
+    grid-template-columns: 1fr;
+  }
+
   .loot-modal {
     max-height: 92vh;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1220px) {
+  .modal-detail-content .signup-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

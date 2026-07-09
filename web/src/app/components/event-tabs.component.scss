@@ -1,0 +1,36 @@
+:host {
+  display: block;
+}
+
+.event-tabs {
+  align-items: center;
+  border-bottom: 1px solid #d8dee9;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 18px;
+  overflow: visible;
+}
+
+.event-tabs a {
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  color: #475569;
+  font-weight: 800;
+  padding: 10px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.event-tabs a.active {
+  background: #ffffff;
+  border-color: #d8dee9;
+  color: #1f6feb;
+  margin-bottom: -1px;
+}
+
+.event-tabs a:not(.active):hover {
+  color: #0f172a;
+  background: #eef2f7;
+}

@@ -80,6 +80,36 @@ export type CreateEventInput = {
   customSlots?: string;
 };
 
+export type TemplateSlot = {
+  id: string;
+  category: string;
+  assignmentGroup: "ship" | "ground";
+  label: string;
+  capacity: number;
+  sortOrder: number;
+};
+
+export type EventTemplateSummary = {
+  id: string;
+  guildId: string;
+  createdById: string;
+  createdByName: string;
+  name: string;
+  description: string | null;
+  isDefault: boolean;
+  slots: TemplateSlot[];
+};
+
+export type SaveTemplateInput = {
+  name: string;
+  slots: Array<{
+    category: string;
+    assignmentGroup: "ship" | "ground";
+    label: string;
+    capacity: number;
+  }>;
+};
+
 export type WebSession = {
   user: {
     id: string;
@@ -166,6 +196,22 @@ export class ApiService {
 
   createEvent(input: CreateEventInput) {
     return this.http.post<CreatedEventDetails>("/api/events", input);
+  }
+
+  listTemplates() {
+    return this.http.get<{ templates: EventTemplateSummary[] }>("/api/templates");
+  }
+
+  createTemplate(input: SaveTemplateInput) {
+    return this.http.post<{ template: EventTemplateSummary }>("/api/templates", input);
+  }
+
+  updateTemplate(id: string, input: SaveTemplateInput) {
+    return this.http.put<{ template: EventTemplateSummary }>(`/api/templates/${id}`, input);
+  }
+
+  deleteTemplate(id: string) {
+    return this.http.delete<{ ok: boolean }>(`/api/templates/${id}`);
   }
 
   addLootItems(eventId: string, items: string) {
