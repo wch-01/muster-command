@@ -55,8 +55,7 @@ a {
 }
 
 .top-menu nav a,
-.user-menu a,
-.menu-group > button {
+.user-menu a {
   border-radius: 6px;
   border: 0;
   background: transparent;
@@ -68,42 +67,9 @@ a {
   text-decoration: none;
 }
 
-.top-menu nav a.active,
-.menu-group.active > button,
-.menu-group:hover > button {
+.top-menu nav a.active {
   color: #ffffff;
   background: #1f6feb;
-}
-
-.menu-group {
-  position: relative;
-}
-
-.menu-group > button {
-  display: block;
-}
-
-.menu-dropdown {
-  display: none;
-  position: absolute;
-  z-index: 10;
-  top: 100%;
-  left: 0;
-  min-width: 170px;
-  padding: 6px;
-  background: #ffffff;
-  border: 1px solid #d7dde4;
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.12);
-}
-
-.menu-dropdown a {
-  display: block;
-}
-
-.menu-group:hover .menu-dropdown,
-.menu-group:focus-within .menu-dropdown {
-  display: block;
 }
 
 .user-menu {

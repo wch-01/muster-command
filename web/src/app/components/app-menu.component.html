@@ -3,14 +3,7 @@
   <span class="env-badge" *ngIf="state === 'development'">Dev</span>
   <nav aria-label="Primary navigation">
     <a [class.active]="active === 'dashboard'" href="/app/dashboard">Dashboard</a>
-    <div class="menu-group" [class.active]="eventActive">
-      <button type="button">Events</button>
-      <div class="menu-dropdown">
-        <a [class.active]="active === 'active-events'" href="/app/active-events">Active Events</a>
-        <a [class.active]="active === 'create-event'" href="/app/events">Create Event</a>
-        <a [class.active]="active === 'past-events'" href="/app/past-events">Past Events</a>
-      </div>
-    </div>
+    <a [class.active]="eventActive" href="/app/active-events">Events</a>
     <a [class.active]="active === 'commands'" href="/slash-commands">Bot Commands</a>
     <a [class.active]="active === 'templates'" href="/app/templates">Templates</a>
     <a [class.active]="active === 'admin'" href="/admin">Admin</a>

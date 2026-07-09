@@ -1,12 +1,10 @@
 import { CommonModule, DatePipe } from "@angular/common";
-import { ChangeDetectorRef, Component } from "@angular/core";
+import { ChangeDetectorRef, Component, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import {
   IonButton,
   IonCard,
   IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
   IonContent,
   IonInput,
   IonItem,
@@ -17,7 +15,8 @@ import {
   IonToggle,
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
-import { ApiService, type CreatedEventDetails, type CreateEventInput } from "../services/api.service";
+import { EventTabsComponent } from "../components/event-tabs.component";
+import { ApiService, type CreatedEventDetails, type CreateEventInput, type EventTemplateSummary } from "../services/api.service";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
 
@@ -53,11 +52,10 @@ type GroundTeamGroup = {
     DatePipe,
     FormsModule,
     AppMenuComponent,
+    EventTabsComponent,
     IonButton,
     IonCard,
     IonCardContent,
-    IonCardHeader,
-    IonCardTitle,
     IonContent,
     IonInput,
     IonItem,
@@ -70,7 +68,7 @@ type GroundTeamGroup = {
   templateUrl: "./event-create.page.html",
   styleUrls: ["./event-create.page.scss"],
 })
-export class EventCreatePage {
+export class EventCreatePage implements OnInit {
   saving = false;
   error = "";
   createdEvent?: { id: string; name: string; activeServerName?: string };
@@ -78,6 +76,7 @@ export class EventCreatePage {
   extraCrewCapacity = 25;
   ships: ShipGroup[] = [];
   groundTeams: GroundTeamGroup[] = [];
+  templates: EventTemplateSummary[] = [];
   form: CreateEventInput = {
     name: "",
     description: "",
@@ -92,6 +91,10 @@ export class EventCreatePage {
     private readonly changeDetector: ChangeDetectorRef,
   ) {
     this.applyTemplate("combat-op");
+  }
+
+  ngOnInit() {
+    this.loadTemplates();
   }
 
   get selectedTemplateRoles() {
@@ -132,10 +135,10 @@ export class EventCreatePage {
         description: "",
         logoUrl: "",
         startsAt: "",
-        preset: "combat-op",
+        preset: this.defaultTemplateId() ?? "combat-op",
         lootDurationHours: 24,
       };
-      this.applyTemplate("combat-op");
+      this.applyTemplate(this.form.preset);
     } catch (error) {
       console.error("Create event failed:", error);
       this.error = error instanceof Error ? error.message : "Event could not be created.";
@@ -205,6 +208,22 @@ export class EventCreatePage {
     this.applyTemplate(this.form.preset);
   }
 
+  private loadTemplates() {
+    this.api.listTemplates().subscribe({
+      next: ({ templates }) => {
+        this.templates = templates;
+        const defaultTemplateId = this.defaultTemplateId();
+        if (defaultTemplateId && this.form.preset === "combat-op") {
+          this.form.preset = defaultTemplateId;
+          this.applyTemplate(defaultTemplateId);
+        }
+      },
+      error: (error) => {
+        console.warn("Could not load event templates:", error);
+      },
+    });
+  }
+
   addShip() {
     this.ships = [
       ...this.ships,
@@ -262,41 +281,6 @@ export class EventCreatePage {
   }
 
   private applyTemplate(preset: string) {
-    if (preset === "ground-team") {
-      this.ships = [];
-      this.groundTeams = [
-        {
-          name: "Ground team 1",
-          crewCount: 10,
-          roles: [
-            { label: "Combat heavy", capacity: 2 },
-            { label: "Combat", capacity: 4 },
-            { label: "Medic", capacity: 2 },
-            { label: "Tech", capacity: 1 },
-            { label: "Industrialist", capacity: 1 },
-          ],
-        },
-      ];
-      return;
-    }
-
-    if (preset === "ship-crew") {
-      this.ships = [
-        {
-          type: "Ship 1",
-          crewCount: 7,
-          roles: [
-            { label: "Captain", capacity: 1 },
-            { label: "Pilot", capacity: 1 },
-            { label: "Gunner", capacity: 4 },
-            { label: "Engineer", capacity: 1 },
-          ],
-        },
-      ];
-      this.groundTeams = [];
-      return;
-    }
-
     if (preset === "custom") {
       this.ships = [
         {
@@ -318,6 +302,12 @@ export class EventCreatePage {
           ],
         },
       ];
+      return;
+    }
+
+    const template = this.templates.find((item) => item.id === preset);
+    if (template) {
+      this.applyTemplateSlots(template);
       return;
     }
 
@@ -346,6 +336,33 @@ export class EventCreatePage {
     ];
   }
 
+  private applyTemplateSlots(template: EventTemplateSummary) {
+    const shipGroups = new Map<string, CrewRole[]>();
+    const groundGroups = new Map<string, CrewRole[]>();
+
+    for (const slot of template.slots) {
+      const target = slot.assignmentGroup === "ground" ? groundGroups : shipGroups;
+      const roles = target.get(slot.category) ?? [];
+      roles.push({ label: slot.label, capacity: slot.capacity });
+      target.set(slot.category, roles);
+    }
+
+    this.ships = Array.from(shipGroups.entries()).map(([type, roles], index) => ({
+      type: type || `Ship ${index + 1}`,
+      crewCount: this.roleTotal(roles),
+      roles,
+    }));
+    this.groundTeams = Array.from(groundGroups.entries()).map(([name, roles], index) => ({
+      name: name || `Ground team ${index + 1}`,
+      crewCount: this.roleTotal(roles),
+      roles,
+    }));
+  }
+
+  private defaultTemplateId() {
+    return this.templates.find((template) => template.name.toLowerCase() === "combat op")?.id ?? this.templates[0]?.id;
+  }
+
   private templateRoles(preset: string): RoleTemplate[] {
     const presets: Record<string, RoleTemplate[]> = {
       "combat-op": [
@@ -357,21 +374,18 @@ export class EventCreatePage {
         { category: "Ground team", group: "ground", label: "Medic", capacity: 1 },
         { category: "Ground team", group: "ground", label: "Industrialist", capacity: 1 },
       ],
-      "ground-team": [
-        { category: "Ground team", group: "ground", label: "Combat heavy", capacity: 1 },
-        { category: "Ground team", group: "ground", label: "Combat", capacity: 4 },
-        { category: "Ground team", group: "ground", label: "Medic", capacity: 1 },
-        { category: "Ground team", group: "ground", label: "Tech", capacity: 1 },
-        { category: "Ground team", group: "ground", label: "Industrialist", capacity: 1 },
-      ],
-      "ship-crew": [
-        { category: "Fleet", group: "ship", label: "Captain", capacity: 1 },
-        { category: "Fleet", group: "ship", label: "Pilot", capacity: 1 },
-        { category: "Fleet", group: "ship", label: "Gunner", capacity: 4 },
-        { category: "Fleet", group: "ship", label: "Engineer", capacity: 1 },
-      ],
       custom: [],
     };
+
+    const template = this.templates.find((item) => item.id === preset);
+    if (template) {
+      return template.slots.map((slot) => ({
+        category: slot.category,
+        group: slot.assignmentGroup,
+        label: slot.label,
+        capacity: slot.capacity,
+      }));
+    }
 
     return presets[preset] ?? presets["combat-op"];
   }
@@ -405,9 +419,9 @@ export class EventCreatePage {
 
     if (this.allowExtraCrew) {
       slots.push({
-        category: "Extra crew",
+        category: "Extra Crew",
         group: "extra",
-        label: "Extra crew",
+        label: "Extra Crew",
         capacity: this.extraCrewCapacity,
       });
     }

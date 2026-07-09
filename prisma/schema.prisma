@@ -41,6 +41,35 @@ model Event {
   @@index([guildId, status])
 }
 
+model EventTemplate {
+  id            String              @id @default(uuid())
+  guildId       String
+  createdById   String
+  createdByName String
+  name          String
+  description   String?
+  isDefault     Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  slots         EventTemplateSlot[]
+
+  @@unique([guildId, name])
+  @@index([guildId])
+}
+
+model EventTemplateSlot {
+  id              String        @id @default(uuid())
+  templateId      String
+  category        String
+  assignmentGroup String        @default("ship")
+  label           String
+  capacity        Int
+  sortOrder       Int
+  template        EventTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, sortOrder])
+}
+
 model CrewSlot {
   id          String           @id @default(uuid())
   eventId     String

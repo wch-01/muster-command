@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomBytes } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./db.js";
 import { createEvent, endEvent, eventInclude } from "./events/event-service.js";
 import { addLootItems, drawRaffleByEventId, lootInclude } from "./loot/loot-service.js";
-import { type SlotPresetName, slotPresets } from "./slot-presets.js";
+import { type SlotPresetName, slotPresets, type SlotSeed } from "./slot-presets.js";
 import type { AuthenticatedUser } from "./auth.js";
 import { notifyEventsChanged } from "./event-stream.js";
 import { botGuildTextChannels } from "./bot-runtime.js";
@@ -63,6 +64,73 @@ const parseItems = (value: unknown) => {
 };
 
 const createOwnerWebKey = () => randomBytes(32).toString("hex");
+
+const defaultCombatOpTemplate: SlotSeed[] = [
+  { category: "Capital ship 1", assignmentGroup: "ship", label: "Big ship captain", capacity: 1 },
+  { category: "Capital ship 1", assignmentGroup: "ship", label: "Gunner", capacity: 2 },
+  { category: "Capital ship 1", assignmentGroup: "ship", label: "Fighter pilot", capacity: 2 },
+  { category: "Ground team 1", assignmentGroup: "ground", label: "Combat heavy", capacity: 1 },
+  { category: "Ground team 1", assignmentGroup: "ground", label: "Combat", capacity: 3 },
+  { category: "Ground team 1", assignmentGroup: "ground", label: "Medic", capacity: 1 },
+  { category: "Ground team 1", assignmentGroup: "ground", label: "Industrialist", capacity: 1 },
+];
+
+const templateInclude = {
+  slots: { orderBy: { sortOrder: "asc" } },
+} satisfies Prisma.EventTemplateInclude;
+
+const normalizeTemplateSlots = (value: unknown): SlotSeed[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((slot) => {
+      const record = slot as Record<string, unknown>;
+      const category = typeof record.category === "string" ? record.category.trim() : "";
+      const label = typeof record.label === "string" ? record.label.trim() : "";
+      const assignmentGroup = record.assignmentGroup === "ground" ? "ground" : record.assignmentGroup === "ship" ? "ship" : undefined;
+      const capacity = Number(record.capacity);
+
+      if (!category || !label || !assignmentGroup || !Number.isInteger(capacity) || capacity < 1) {
+        return undefined;
+      }
+
+      return {
+        category,
+        assignmentGroup,
+        label,
+        capacity: Math.min(capacity, 25),
+      };
+    })
+    .filter((slot): slot is SlotSeed => Boolean(slot));
+};
+
+const ensureDefaultTemplate = async (guildId: string) => {
+  const templateCount = await prisma.eventTemplate.count({ where: { guildId } });
+  if (templateCount > 0) {
+    return;
+  }
+
+  await prisma.eventTemplate.create({
+    data: {
+      guildId,
+      createdById: "system",
+      createdByName: "Muster Command",
+      name: "Combat Op",
+      isDefault: true,
+      slots: {
+        create: defaultCombatOpTemplate.map((slot, index) => ({
+          category: slot.category,
+          assignmentGroup: slot.assignmentGroup,
+          label: slot.label,
+          capacity: slot.capacity,
+          sortOrder: index,
+        })),
+      },
+    },
+  });
+};
 
 const removeOwnerWebKey = <T extends { ownerWebKey?: string | null }>(event: T) => {
   const { ownerWebKey, ...safeEvent } = event;
@@ -204,6 +272,154 @@ export const handleApiRequest = async (
           };
         }),
       });
+      return true;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/templates") {
+      if (!activeGuildId) {
+        json(response, 200, { templates: [] });
+        return true;
+      }
+
+      await ensureDefaultTemplate(activeGuildId);
+      const templates = await prisma.eventTemplate.findMany({
+        where: { guildId: activeGuildId },
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+        include: templateInclude,
+      });
+
+      json(response, 200, { templates });
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/templates") {
+      if (!activeGuildId || !user || !activeGuildProfileName) {
+        json(response, 400, { error: "Select a server before creating templates." });
+        return true;
+      }
+
+      const body = await readJsonBody<{ name?: string; slots?: unknown }>(request).catch(() => ({}) as any);
+      const name = body.name?.trim();
+      const slots = normalizeTemplateSlots(body.slots);
+
+      if (!name) {
+        json(response, 400, { error: "Template name is required." });
+        return true;
+      }
+
+      if (!slots.length) {
+        json(response, 400, { error: "Add at least one fleet or ground role." });
+        return true;
+      }
+
+      const duplicate = await prisma.eventTemplate.findFirst({
+        where: { guildId: activeGuildId, name },
+      });
+      if (duplicate) {
+        json(response, 409, { error: "A template with that name already exists on this server." });
+        return true;
+      }
+
+      const template = await prisma.eventTemplate.create({
+        data: {
+          guildId: activeGuildId,
+          createdById: user.id,
+          createdByName: activeGuildProfileName,
+          name,
+          slots: {
+            create: slots.map((slot, index) => ({
+              category: slot.category,
+              assignmentGroup: slot.assignmentGroup,
+              label: slot.label,
+              capacity: slot.capacity,
+              sortOrder: index,
+            })),
+          },
+        },
+        include: templateInclude,
+      });
+
+      json(response, 201, { template });
+      return true;
+    }
+
+    const templateMatch = url.pathname.match(/^\/api\/templates\/([^/]+)$/);
+    if (request.method === "PUT" && templateMatch) {
+      if (!activeGuildId) {
+        json(response, 400, { error: "Select a server before editing templates." });
+        return true;
+      }
+
+      const existing = await prisma.eventTemplate.findFirst({
+        where: { id: templateMatch[1], guildId: activeGuildId },
+      });
+      if (!existing) {
+        json(response, 404, { error: "Template not found." });
+        return true;
+      }
+
+      const body = await readJsonBody<{ name?: string; slots?: unknown }>(request).catch(() => ({}) as any);
+      const name = body.name?.trim();
+      const slots = normalizeTemplateSlots(body.slots);
+
+      if (!name) {
+        json(response, 400, { error: "Template name is required." });
+        return true;
+      }
+
+      if (!slots.length) {
+        json(response, 400, { error: "Add at least one fleet or ground role." });
+        return true;
+      }
+
+      const duplicate = await prisma.eventTemplate.findFirst({
+        where: { guildId: activeGuildId, name, id: { not: existing.id } },
+      });
+      if (duplicate) {
+        json(response, 409, { error: "A template with that name already exists on this server." });
+        return true;
+      }
+
+      const template = await prisma.$transaction(async (tx) => {
+        await tx.eventTemplateSlot.deleteMany({ where: { templateId: existing.id } });
+        return tx.eventTemplate.update({
+          where: { id: existing.id },
+          data: {
+            name,
+            slots: {
+              create: slots.map((slot, index) => ({
+                category: slot.category,
+                assignmentGroup: slot.assignmentGroup,
+                label: slot.label,
+                capacity: slot.capacity,
+                sortOrder: index,
+              })),
+            },
+          },
+          include: templateInclude,
+        });
+      });
+
+      json(response, 200, { template });
+      return true;
+    }
+
+    if (request.method === "DELETE" && templateMatch) {
+      if (!activeGuildId) {
+        json(response, 400, { error: "Select a server before deleting templates." });
+        return true;
+      }
+
+      const existing = await prisma.eventTemplate.findFirst({
+        where: { id: templateMatch[1], guildId: activeGuildId },
+      });
+      if (!existing) {
+        json(response, 404, { error: "Template not found." });
+        return true;
+      }
+
+      await prisma.eventTemplate.delete({ where: { id: existing.id } });
+      json(response, 200, { ok: true });
       return true;
     }
 

@@ -1,10 +1,9 @@
 import { CommonModule, DatePipe } from "@angular/common";
-import { ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from "@angular/core";
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import {
   IonBadge,
   IonButton,
-  IonChip,
   IonContent,
   IonInput,
   IonItem,
@@ -27,7 +26,6 @@ type AssignmentGroup = "ship" | "ground" | "extra";
     AppMenuComponent,
     IonBadge,
     IonButton,
-    IonChip,
     IonContent,
     IonInput,
     IonItem,
@@ -40,6 +38,9 @@ type AssignmentGroup = "ship" | "ground" | "extra";
 })
 export class EventDetailPage implements OnInit, OnDestroy {
   @Input() id = "";
+  @Input() modalMode = false;
+  @Input() initialLootOpen = false;
+  @Output() closeRequested = new EventEmitter<void>();
   groups: AssignmentGroup[] = ["ship", "ground", "extra"];
   event?: EventDetails;
   error = "";
@@ -81,6 +82,9 @@ export class EventDetailPage implements OnInit, OnDestroy {
     this.api.getEvent(this.id).subscribe({
       next: (event) => {
         this.event = event;
+        if (this.initialLootOpen) {
+          this.lootOpen = true;
+        }
         this.changeDetector.detectChanges();
       },
       error: (error) => {

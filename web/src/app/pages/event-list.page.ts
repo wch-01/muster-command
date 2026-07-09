@@ -2,20 +2,27 @@ import { CommonModule, DatePipe } from "@angular/common";
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
 import { ActivatedRoute } from "@angular/router";
 import { IonContent } from "@ionic/angular/standalone";
+import { Subscription } from "rxjs";
 import { AppMenuComponent } from "../components/app-menu.component";
+import { EventTabsComponent } from "../components/event-tabs.component";
+import { EventDetailPage } from "./event-detail.page";
 import { type EventSummary } from "../services/api.service";
 
 @Component({
   selector: "app-event-list-page",
   standalone: true,
-  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent],
+  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent, EventDetailPage],
   templateUrl: "./event-list.page.html",
   styleUrls: ["./event-list.page.scss"],
 })
 export class EventListPage implements OnInit, OnDestroy {
   mode: "active" | "past" = "active";
   events: EventSummary[] = [];
+  expandedEventIds = new Set<string>();
+  selectedEventId = "";
+  selectedEventLootOpen = false;
   error = "";
+  private routeSubscription?: Subscription;
   private stream?: EventSource;
 
   constructor(
@@ -24,15 +31,16 @@ export class EventListPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    this.mode = this.route.snapshot.data["mode"] === "past" ? "past" : "active";
-    this.loadEvents();
-    if (this.mode === "active") {
-      this.stream = new EventSource("/api/events/stream");
-      this.stream.addEventListener("events-changed", () => this.loadEvents());
-    }
+    this.routeSubscription = this.route.data.subscribe((data) => {
+      this.mode = data["mode"] === "past" ? "past" : "active";
+      this.expandedEventIds.clear();
+      this.loadEvents();
+      this.syncEventStream();
+    });
   }
 
   ngOnDestroy() {
+    this.routeSubscription?.unsubscribe();
     this.stream?.close();
   }
 
@@ -70,6 +78,31 @@ export class EventListPage implements OnInit, OnDestroy {
     }
   }
 
+  toggleEvent(eventId: string) {
+    if (this.expandedEventIds.has(eventId)) {
+      this.expandedEventIds.delete(eventId);
+    } else {
+      this.expandedEventIds.add(eventId);
+    }
+
+    this.refreshView();
+  }
+
+  isExpanded(eventId: string) {
+    return this.expandedEventIds.has(eventId);
+  }
+
+  participantCount(event: EventSummary) {
+    const userIds = new Set<string>();
+    for (const slot of event.slots) {
+      for (const assignment of slot.assignments) {
+        userIds.add(assignment.discordUserId);
+      }
+    }
+
+    return userIds.size;
+  }
+
   openSlots(slot: EventSummary["slots"][number]) {
     return Array.from(
       { length: Math.max(slot.capacity - slot.assignments.length, 0) },
@@ -79,6 +112,30 @@ export class EventListPage implements OnInit, OnDestroy {
 
   copyId(id: string) {
     void navigator.clipboard?.writeText(id);
+  }
+
+  openEvent(eventId: string, openLoot = false) {
+    this.selectedEventId = eventId;
+    this.selectedEventLootOpen = openLoot;
+    this.refreshView();
+  }
+
+  closeEventModal() {
+    this.selectedEventId = "";
+    this.selectedEventLootOpen = false;
+    this.refreshView();
+  }
+
+  private syncEventStream() {
+    this.stream?.close();
+    this.stream = undefined;
+
+    if (this.mode !== "active") {
+      return;
+    }
+
+    this.stream = new EventSource("/api/events/stream");
+    this.stream.addEventListener("events-changed", () => this.loadEvents());
   }
 
   private refreshView() {

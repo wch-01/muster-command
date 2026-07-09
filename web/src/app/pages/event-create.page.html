@@ -2,10 +2,9 @@
 
 <ion-content>
   <main class="page-shell event-create-page">
+    <app-event-tabs active="create-event" />
+
     <ion-card class="compact-card create-card">
-      <ion-card-header>
-        <ion-card-title>Create Event</ion-card-title>
-      </ion-card-header>
       <ion-card-content>
         <section class="create-form-grid">
           <ion-list lines="full" class="form-section">
@@ -13,22 +12,17 @@
               <ion-input label="Event name" labelPlacement="stacked" [(ngModel)]="form.name" required />
             </ion-item>
             <ion-item>
-              <ion-textarea label="Description" labelPlacement="stacked" autoGrow="true" [(ngModel)]="form.description" />
+              <ion-input label="Start time" labelPlacement="stacked" type="datetime-local" [(ngModel)]="form.startsAt" />
             </ion-item>
             <ion-item>
               <ion-input label="Logo image URL" labelPlacement="stacked" [(ngModel)]="form.logoUrl" />
-            </ion-item>
-            <ion-item>
-              <ion-input label="Start time" labelPlacement="stacked" type="datetime-local" [(ngModel)]="form.startsAt" />
             </ion-item>
           </ion-list>
 
           <ion-list lines="full" class="form-section">
             <ion-item>
-              <ion-select label="Role template" labelPlacement="stacked" [(ngModel)]="form.preset" (ionChange)="presetChanged()">
-                <ion-select-option value="combat-op">Combat op</ion-select-option>
-                <ion-select-option value="ground-team">Ground team</ion-select-option>
-                <ion-select-option value="ship-crew">Ship crew</ion-select-option>
+              <ion-select label="Event Template" labelPlacement="stacked" [(ngModel)]="form.preset" (ionChange)="presetChanged()">
+                <ion-select-option *ngFor="let template of templates" [value]="template.id">{{ template.name }}</ion-select-option>
                 <ion-select-option value="custom">Custom</ion-select-option>
               </ion-select>
             </ion-item>
@@ -39,7 +33,13 @@
               </ion-select>
             </ion-item>
             <ion-item>
-              <ion-toggle labelPlacement="start" [(ngModel)]="allowExtraCrew">Extra crew</ion-toggle>
+              <ion-toggle labelPlacement="start" [(ngModel)]="allowExtraCrew">Extra Crew</ion-toggle>
+            </ion-item>
+          </ion-list>
+
+          <ion-list lines="full" class="form-section description-section">
+            <ion-item>
+              <ion-textarea label="Description" labelPlacement="stacked" autoGrow="true" [(ngModel)]="form.description" />
             </ion-item>
           </ion-list>
         </section>
@@ -47,17 +47,16 @@
         <section class="crew-builder">
           <div class="builder-heading">
             <h2>Fleet</h2>
-            <button class="mini-button primary" type="button" (click)="addShip()">Add ship</button>
           </div>
 
           <article class="builder-card" *ngFor="let ship of ships; let shipIndex = index">
             <header>
               <h3>Ship {{ shipIndex + 1 }}</h3>
-              <button class="mini-button danger" type="button" (click)="removeShip(shipIndex)">Remove ship</button>
+              <button class="mini-button danger" type="button" (click)="removeShip(shipIndex)">Remove Ship</button>
             </header>
             <div class="builder-grid">
-              <ion-input label="Ship type" labelPlacement="stacked" [(ngModel)]="ship.type" />
-              <ion-input label="Crew count" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="ship.crewCount" />
+              <ion-input label="Ship Type" labelPlacement="stacked" [(ngModel)]="ship.type" />
+              <ion-input label="Crew Count" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="ship.crewCount" />
             </div>
             <div class="role-row header-row">
               <strong>Role</strong>
@@ -70,28 +69,28 @@
               <button class="mini-button danger" type="button" (click)="removeShipRole(ship, roleIndex)">Remove</button>
             </div>
             <div class="builder-footer">
-              <span class="muted">Assigned role slots: {{ roleTotal(ship.roles) }} / Crew count: {{ ship.crewCount }}</span>
-              <button class="mini-button" type="button" (click)="addShipRole(ship)">Add role</button>
+              <span class="muted">Assigned Role Slots: {{ roleTotal(ship.roles) }} / Crew Count: {{ ship.crewCount }}</span>
+              <button class="mini-button" type="button" (click)="addShipRole(ship)">Add Role</button>
             </div>
           </article>
 
           <p class="muted" *ngIf="!ships.length">No ships added.</p>
+          <button class="mini-button primary builder-add-button" type="button" (click)="addShip()">Add Ship</button>
         </section>
 
         <section class="crew-builder">
           <div class="builder-heading">
             <h2>Ground Teams</h2>
-            <button class="mini-button primary" type="button" (click)="addGroundTeam()">Add ground team</button>
           </div>
 
           <article class="builder-card" *ngFor="let team of groundTeams; let teamIndex = index">
             <header>
               <h3>Ground Team {{ teamIndex + 1 }}</h3>
-              <button class="mini-button danger" type="button" (click)="removeGroundTeam(teamIndex)">Remove team</button>
+              <button class="mini-button danger" type="button" (click)="removeGroundTeam(teamIndex)">Remove Team</button>
             </header>
             <div class="builder-grid">
-              <ion-input label="Team name/type" labelPlacement="stacked" [(ngModel)]="team.name" />
-              <ion-input label="Crew count" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="team.crewCount" />
+              <ion-input label="Team Name/Type" labelPlacement="stacked" [(ngModel)]="team.name" />
+              <ion-input label="Crew Count" labelPlacement="stacked" type="number" min="1" max="25" [(ngModel)]="team.crewCount" />
             </div>
             <div class="role-row header-row">
               <strong>Role</strong>
@@ -104,17 +103,18 @@
               <button class="mini-button danger" type="button" (click)="removeGroundRole(team, roleIndex)">Remove</button>
             </div>
             <div class="builder-footer">
-              <span class="muted">Assigned role slots: {{ roleTotal(team.roles) }} / Crew count: {{ team.crewCount }}</span>
-              <button class="mini-button" type="button" (click)="addGroundRole(team)">Add role</button>
+              <span class="muted">Assigned Role Slots: {{ roleTotal(team.roles) }} / Crew Count: {{ team.crewCount }}</span>
+              <button class="mini-button" type="button" (click)="addGroundRole(team)">Add Role</button>
             </div>
           </article>
 
           <p class="muted" *ngIf="!groundTeams.length">No ground teams added.</p>
+          <button class="mini-button primary builder-add-button" type="button" (click)="addGroundTeam()">Add Ground Team</button>
         </section>
 
         <div class="create-actions">
           <ion-button expand="block" (click)="createEvent()" [disabled]="saving || !form.name.trim() || !previewSlots().length">
-            {{ saving ? "Creating..." : "Create event" }}
+            {{ saving ? "Creating..." : "Create Event" }}
           </ion-button>
         </div>
 
@@ -123,8 +123,8 @@
           <strong>Event created</strong>
           <p>{{ createdEvent.name }} is ready in {{ createdEvent.activeServerName || "the active server" }}.</p>
           <div class="event-button-row">
-            <a class="mini-button primary" [href]="'/app/events/' + createdEvent.id">View event</a>
-            <button class="mini-button" (click)="copyId(createdEvent.id)">Copy event ID</button>
+            <a class="mini-button primary" [href]="'/app/events/' + createdEvent.id">View Event</a>
+            <button class="mini-button" (click)="copyId(createdEvent.id)">Copy Event ID</button>
           </div>
         </section>
       </ion-card-content>
@@ -170,8 +170,8 @@
       <div class="event-button-row">
         <button class="mini-button primary" *ngFor="let slot of groupedPreviewSlots('ship')">{{ slot.label }}</button>
         <button class="mini-button primary" *ngFor="let slot of groupedPreviewSlots('ground')">{{ slot.label }}</button>
-        <button class="mini-button primary" *ngIf="allowExtraCrew">Extra crew</button>
-        <button class="mini-button">Copy event ID</button>
+        <button class="mini-button primary" *ngIf="allowExtraCrew">Extra Crew</button>
+        <button class="mini-button">Copy Event ID</button>
         <button class="mini-button danger">Leave event</button>
       </div>
     </section>
