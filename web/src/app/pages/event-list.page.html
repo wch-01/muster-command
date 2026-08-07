@@ -6,7 +6,11 @@
 
     <div class="error-panel" *ngIf="error">{{ error }}</div>
 
-    <article class="event-panel accordion-card" *ngFor="let event of events">
+    <article
+      class="event-panel accordion-card"
+      *ngFor="let event of events"
+      [class.return-highlight]="highlightedEventId === event.id"
+    >
       <div class="accordion-summary">
         <button
           class="accordion-toggle"
@@ -34,8 +38,8 @@
         </header>
 
         <div class="event-id-row">
-          <code>{{ event.id }}</code>
-          <button class="mini-button" type="button" (click)="copyId(event.id)">Copy</button>
+          <span><strong>Event ID:</strong> <code>{{ event.id }}</code></span>
+          <button class="mini-button" type="button" (click)="copyId(event.id)">Copy ID</button>
         </div>
 
         <div class="slot-grid">
@@ -53,14 +57,3 @@
     </p>
   </main>
 </ion-content>
-
-<div class="event-modal-backdrop" *ngIf="selectedEventId" (click)="closeEventModal()">
-  <section class="event-modal" role="dialog" aria-modal="true" aria-label="Event details" (click)="$event.stopPropagation()">
-    <app-event-detail-page
-      [id]="selectedEventId"
-      [modalMode]="true"
-      [initialLootOpen]="selectedEventLootOpen"
-      (closeRequested)="closeEventModal()"
-    />
-  </section>
-</div>

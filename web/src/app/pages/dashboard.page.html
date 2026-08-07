@@ -30,7 +30,7 @@
         </header>
 
         <div class="dashboard-events" *ngIf="server.activeEvents.length; else noActiveEvents">
-          <a class="dashboard-event" *ngFor="let event of server.activeEvents" [href]="selectServerUrl(server.id, '/app/events/' + event.id)">
+          <a class="dashboard-event" *ngFor="let event of server.activeEvents" [href]="selectServerUrl(server.id, '/app/events/' + event.id + '?from=dashboard')">
             <strong>{{ event.name }}</strong>
             <span>{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</span>
           </a>

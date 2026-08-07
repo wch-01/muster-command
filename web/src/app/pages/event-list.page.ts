@@ -1,39 +1,40 @@
 import { CommonModule, DatePipe } from "@angular/common";
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
-import { ActivatedRoute } from "@angular/router";
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewChild } from "@angular/core";
+import { ActivatedRoute, Router } from "@angular/router";
 import { IonContent } from "@ionic/angular/standalone";
 import { Subscription } from "rxjs";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { EventTabsComponent } from "../components/event-tabs.component";
-import { EventDetailPage } from "./event-detail.page";
 import { type EventSummary } from "../services/api.service";
 
 @Component({
   selector: "app-event-list-page",
   standalone: true,
-  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent, EventDetailPage],
+  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent],
   templateUrl: "./event-list.page.html",
   styleUrls: ["./event-list.page.scss"],
 })
 export class EventListPage implements OnInit, OnDestroy {
+  @ViewChild(IonContent) private content?: IonContent;
   mode: "active" | "past" = "active";
   events: EventSummary[] = [];
   expandedEventIds = new Set<string>();
-  selectedEventId = "";
-  selectedEventLootOpen = false;
+  highlightedEventId = "";
   error = "";
   private routeSubscription?: Subscription;
   private stream?: EventSource;
+  private restoreListPosition = true;
 
   constructor(
     private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly changeDetector: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
     this.routeSubscription = this.route.data.subscribe((data) => {
       this.mode = data["mode"] === "past" ? "past" : "active";
-      this.expandedEventIds.clear();
+      this.restoreListState();
       this.loadEvents();
       this.syncEventStream();
     });
@@ -75,6 +76,7 @@ export class EventListPage implements OnInit, OnDestroy {
             : "Could not load past events.";
     } finally {
       this.refreshView();
+      void this.restoreScrollPosition();
     }
   }
 
@@ -85,6 +87,7 @@ export class EventListPage implements OnInit, OnDestroy {
       this.expandedEventIds.add(eventId);
     }
 
+    this.saveExpandedState();
     this.refreshView();
   }
 
@@ -114,16 +117,15 @@ export class EventListPage implements OnInit, OnDestroy {
     void navigator.clipboard?.writeText(id);
   }
 
-  openEvent(eventId: string, openLoot = false) {
-    this.selectedEventId = eventId;
-    this.selectedEventLootOpen = openLoot;
-    this.refreshView();
-  }
-
-  closeEventModal() {
-    this.selectedEventId = "";
-    this.selectedEventLootOpen = false;
-    this.refreshView();
+  async openEvent(eventId: string, openLoot = false) {
+    await this.saveScrollPosition();
+    this.setSessionValue("muster-event-return-highlight", eventId);
+    await this.router.navigate(["/events", eventId], {
+      queryParams: {
+        from: this.mode === "past" ? "past-events" : "active-events",
+        loot: openLoot ? "1" : undefined,
+      },
+    });
   }
 
   private syncEventStream() {
@@ -140,5 +142,60 @@ export class EventListPage implements OnInit, OnDestroy {
 
   private refreshView() {
     this.changeDetector.detectChanges();
+  }
+
+  private stateKey(name: string) {
+    return `muster-event-list:${this.mode}:${name}`;
+  }
+
+  private restoreListState() {
+    const expanded = this.getSessionValue(this.stateKey("expanded"));
+    this.expandedEventIds = new Set(expanded ? expanded.split(",").filter(Boolean) : []);
+    this.highlightedEventId = this.getSessionValue("muster-event-return-highlight");
+    if (this.highlightedEventId) {
+      sessionStorage.removeItem("muster-event-return-highlight");
+      window.setTimeout(() => {
+        this.highlightedEventId = "";
+        this.refreshView();
+      }, 3000);
+    }
+    this.restoreListPosition = true;
+  }
+
+  private saveExpandedState() {
+    this.setSessionValue(this.stateKey("expanded"), [...this.expandedEventIds].join(","));
+  }
+
+  private async saveScrollPosition() {
+    const scrollElement = await this.content?.getScrollElement();
+    if (scrollElement) {
+      this.setSessionValue(this.stateKey("scroll"), String(scrollElement.scrollTop));
+    }
+  }
+
+  private async restoreScrollPosition() {
+    if (!this.restoreListPosition || !this.content) {
+      return;
+    }
+    this.restoreListPosition = false;
+    const savedPosition = Number(this.getSessionValue(this.stateKey("scroll")) || 0);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await this.content.scrollToPoint(0, savedPosition, 0);
+  }
+
+  private getSessionValue(key: string) {
+    try {
+      return sessionStorage.getItem(key) ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  private setSessionValue(key: string, value: string) {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch {
+      // Browsing remains functional if storage is unavailable.
+    }
   }
 }

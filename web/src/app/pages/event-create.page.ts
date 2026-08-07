@@ -1,6 +1,7 @@
 import { CommonModule, DatePipe } from "@angular/common";
 import { ChangeDetectorRef, Component, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { Router } from "@angular/router";
 import {
   IonButton,
   IonCard,
@@ -88,6 +89,7 @@ export class EventCreatePage implements OnInit {
 
   constructor(
     private readonly api: ApiService,
+    private readonly router: Router,
     private readonly changeDetector: ChangeDetectorRef,
   ) {
     this.applyTemplate("combat-op");
@@ -135,6 +137,9 @@ export class EventCreatePage implements OnInit {
         lootDurationHours: 24,
       };
       this.applyTemplate(this.form.preset);
+      await this.router.navigate(["/events", eventId], {
+        queryParams: { from: "active-events", created: "1" },
+      });
     } catch (error) {
       console.error("Create event failed:", error);
       this.error = error instanceof Error ? error.message : "Event could not be created.";

@@ -5,6 +5,7 @@
 .event-detail {
   display: grid;
   gap: 18px;
+  padding-bottom: 64px;
 }
 
 .event-hero,
@@ -42,17 +43,18 @@
 
 .event-controls {
   padding: 12px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
 }
 
 .event-controls p {
   margin: 4px 0 0;
 }
 
-.modal-detail-content .event-controls {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
+.back-button {
+  margin: 0 0 4px -10px;
 }
 
 .group-actions {
@@ -85,11 +87,8 @@
 .signup-layout {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  align-items: start;
   gap: 14px;
-}
-
-.modal-detail-content .signup-layout {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .event-panel h2 {
@@ -197,31 +196,12 @@
   min-height: 300px;
 }
 
-.modal-detail-content {
-  --background: #f8fafc;
-}
-
-.modal-detail-content .page-shell {
-  padding: 0;
-  width: 100%;
-}
-
 @media (max-width: 720px) {
   .slot-row {
     grid-template-columns: 1fr;
   }
 
-  .modal-detail-content .signup-layout {
-    grid-template-columns: 1fr;
-  }
-
   .loot-modal {
     max-height: 92vh;
-  }
-}
-
-@media (min-width: 721px) and (max-width: 1220px) {
-  .modal-detail-content .signup-layout {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
