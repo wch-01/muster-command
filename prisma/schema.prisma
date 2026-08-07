@@ -20,11 +20,11 @@ enum RaffleStatus {
 model Event {
   id              String           @id @default(uuid())
   guildId         String
-  channelId       String
+  channelId       String?
+  messageId       String?
   reportChannelId String?
   createdById     String
   createdByName   String
-  ownerWebKey     String?          @unique
   name            String
   description     String?
   logoUrl         String?
@@ -102,7 +102,7 @@ model CrewAssignment {
 model LootRaffle {
   id          String       @id @default(uuid())
   eventId     String
-  channelId   String
+  channelId   String?
   messageId   String?
   name        String
   endsAt      DateTime?

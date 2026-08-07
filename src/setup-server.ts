@@ -909,6 +909,18 @@ const renderAdminPage = async (
         <section class="panel">
           <h2>Bot Output</h2>
           <form method="post" action="/admin/settings">
+            <label class="checkbox-row" for="discordEventPublishingEnabled">
+              <input
+                id="discordEventPublishingEnabled"
+                name="discordEventPublishingEnabled"
+                type="checkbox"
+                value="true"
+                ${settings.discordEventPublishingEnabled ? "checked" : ""}
+              />
+              Publish website events and updates to Discord
+            </label>
+            <p class="hint">Disabled by default while the website workflow is being developed.</p>
+
             <label for="eventOutputMode">Event output method</label>
             <select id="eventOutputMode" name="eventOutputMode" onchange="updateOutputFields()">
               <option value="channel" ${outputMode === "channel" ? "selected" : ""}>Dedicated channels</option>
@@ -1381,6 +1393,7 @@ export const startSetupServer = async () => {
         const outputMode = body.get("eventOutputMode") === "thread" ? "thread" : "channel";
         const nextSettings = await saveSettings(
           {
+            discordEventPublishingEnabled: body.get("discordEventPublishingEnabled") === "true",
             eventOutputMode: outputMode,
             eventOutputChannelId: body.get("eventOutputChannelId") ?? undefined,
             lootOutputChannelId:

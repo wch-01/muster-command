@@ -5,6 +5,7 @@ import { type DiscordSettings, envConfig, settingsFromEnv } from "./config.js";
 
 const savedSettingsSchema = z.object({
   eventOutputMode: z.enum(["channel", "thread"]).optional(),
+  discordEventPublishingEnabled: z.boolean().optional(),
   eventOutputChannelId: z.string().optional(),
   lootOutputChannelId: z.string().optional(),
   threadAutoDeleteDays: z.coerce.number().int().min(1).max(30).optional(),
@@ -54,6 +55,9 @@ export const saveSettings = async (
   existing: DiscordSettings,
 ): Promise<DiscordSettings> => {
   const nextSaved = {
+    discordEventPublishingEnabled: hasSetting(input, "discordEventPublishingEnabled")
+      ? Boolean(input.discordEventPublishingEnabled)
+      : existing.discordEventPublishingEnabled ?? false,
     eventOutputMode:
       input.eventOutputMode === "thread" || input.eventOutputMode === "channel"
         ? input.eventOutputMode

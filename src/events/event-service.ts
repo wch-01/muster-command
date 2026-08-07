@@ -24,11 +24,10 @@ export const getEvent = (eventId: string) => {
 
 export const createEvent = async (input: {
   guildId: string;
-  channelId: string;
+  channelId?: string;
   reportChannelId?: string;
   createdById: string;
   createdByName: string;
-  ownerWebKey?: string;
   name: string;
   description?: string;
   logoUrl?: string;
@@ -53,7 +52,6 @@ export const createEvent = async (input: {
       reportChannelId: input.reportChannelId,
       createdById: input.createdById,
       createdByName: input.createdByName,
-      ownerWebKey: input.ownerWebKey,
       name: input.name,
       description: input.description,
       logoUrl: input.logoUrl,

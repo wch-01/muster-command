@@ -1,10 +1,21 @@
-import { ChannelType, Client, Events, GatewayIntentBits, PermissionFlagsBits } from "discord.js";
+import {
+  ChannelType,
+  Client,
+  Events,
+  GatewayIntentBits,
+  PermissionFlagsBits,
+  ThreadAutoArchiveDuration,
+} from "discord.js";
 import { isDiscordConfigured, type DiscordSettings } from "./config.js";
 import { prisma } from "./db.js";
 import { handleButton } from "./interactions/buttons.js";
 import { handleCommand } from "./interactions/commands.js";
 import { startLootScheduler } from "./loot/scheduler.js";
+import { getRaffleByEventId, publishRaffleUpdate } from "./loot/loot-service.js";
+import { eventInclude } from "./events/event-service.js";
+import { eventComponents, eventEmbed } from "./events/event-views.js";
 import type { AuthenticatedUser } from "./auth.js";
+import { loadSettings } from "./settings-store.js";
 
 let client: Client | undefined;
 let stopScheduler: (() => void) | undefined;
@@ -155,6 +166,109 @@ export const botGuildTextChannels = async (guildId: string) => {
   }
 
   return availableChannels.sort((a, b) => a.name.localeCompare(b.name));
+};
+
+export const publishEventPanel = async (eventId: string) => {
+  const settings = await loadSettings();
+  if (!settings.discordEventPublishingEnabled) {
+    return false;
+  }
+
+  const readyClient = client;
+  if (!readyClient?.isReady()) {
+    throw new Error("The Discord bot is not connected.");
+  }
+
+  const event = await prisma.event.findUnique({ where: { id: eventId }, include: eventInclude });
+  if (!event) {
+    throw new Error("Event not found.");
+  }
+
+  let destinationId = event.channelId;
+  if (!destinationId) {
+    const configuredChannelId = settings.eventOutputChannelId;
+    if (!configuredChannelId) {
+      throw new Error("No event output channel is configured.");
+    }
+
+    const configuredChannel = await readyClient.channels.fetch(configuredChannelId);
+    if (
+      !configuredChannel ||
+      (configuredChannel.type !== ChannelType.GuildText &&
+        configuredChannel.type !== ChannelType.GuildAnnouncement)
+    ) {
+      throw new Error("The configured event output channel is not available.");
+    }
+
+    if (settings.eventOutputMode === "thread") {
+      const cleanupDays = settings.threadAutoDeleteDays ?? 7;
+      const autoArchiveDuration =
+        cleanupDays <= 1
+          ? ThreadAutoArchiveDuration.OneDay
+          : cleanupDays <= 3
+            ? ThreadAutoArchiveDuration.ThreeDays
+            : ThreadAutoArchiveDuration.OneWeek;
+      const thread = await configuredChannel.threads.create({
+        name: event.name.slice(0, 100),
+        autoArchiveDuration,
+        reason: `Muster Command event ${event.id}`,
+      });
+      destinationId = thread.id;
+    } else {
+      destinationId = configuredChannel.id;
+    }
+
+    const lootDestinationId =
+      settings.eventOutputMode === "thread"
+        ? destinationId
+        : settings.lootOutputChannelId || destinationId;
+    await prisma.$transaction([
+      prisma.event.update({ where: { id: event.id }, data: { channelId: destinationId } }),
+      prisma.lootRaffle.updateMany({
+        where: { eventId: event.id },
+        data: { channelId: lootDestinationId },
+      }),
+    ]);
+  }
+
+  const channel = await readyClient.channels.fetch(destinationId);
+  if (!channel?.isTextBased() || !("send" in channel)) {
+    throw new Error("The selected Discord channel is not available.");
+  }
+
+  if (event.messageId) {
+    const existing = await channel.messages.fetch(event.messageId).catch(() => null);
+    if (existing) {
+      await existing.edit({ embeds: [eventEmbed(event)], components: eventComponents(event) });
+      return true;
+    }
+  }
+
+  const message = await channel.send({ embeds: [eventEmbed(event)], components: eventComponents(event) });
+  await prisma.event.update({ where: { id: event.id }, data: { messageId: message.id } });
+  return true;
+};
+
+export const publishLootPanel = async (eventId: string) => {
+  const settings = await loadSettings();
+  if (!settings.discordEventPublishingEnabled) {
+    return false;
+  }
+
+  const readyClient = client;
+  if (!readyClient?.isReady()) {
+    throw new Error("The Discord bot is not connected.");
+  }
+
+  let raffle = await getRaffleByEventId(eventId);
+  if (raffle && !raffle.channelId) {
+    await publishEventPanel(eventId);
+    raffle = await getRaffleByEventId(eventId);
+  }
+  if (raffle) {
+    await publishRaffleUpdate(readyClient, raffle);
+  }
+  return Boolean(raffle);
 };
 
 export const stopBot = async () => {

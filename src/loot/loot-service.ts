@@ -117,6 +117,9 @@ export const drawRaffleByEventId = async (eventId: string) => {
 };
 
 export const publishRaffleUpdate = async (client: Client, raffle: RaffleWithItems) => {
+  if (!raffle.channelId) {
+    return;
+  }
   const channel = await client.channels.fetch(raffle.channelId);
   if (!channel?.isTextBased() || !("send" in channel)) {
     return;
@@ -153,6 +156,9 @@ export const publishRaffleReplacement = async (
   raffle: RaffleWithItems,
   addedItems: string[],
 ) => {
+  if (!raffle.channelId) {
+    return;
+  }
   const channel = await client.channels.fetch(raffle.channelId);
   if (!channel?.isTextBased() || !("send" in channel)) {
     return;
@@ -189,6 +195,9 @@ export const publishRaffleReplacement = async (
 };
 
 export const publishFreshRafflePanel = async (client: Client, raffle: RaffleWithItems) => {
+  if (!raffle.channelId) {
+    return;
+  }
   const channel = await client.channels.fetch(raffle.channelId);
   if (!channel?.isTextBased() || !("send" in channel)) {
     return;

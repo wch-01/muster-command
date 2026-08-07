@@ -173,6 +173,7 @@ PhpStorm should detect the Node.js project, TypeScript config, Prisma schema, an
 
 ## Notes for the Next Build Pass
 
+- Update `/event create` so it always posts the event in the event channel configured for that server on the website, even when the command is used elsewhere. After creation, send the invoking user an ephemeral response (or DM fallback) identifying and linking to the configured event channel.
 - Add admin permission checks if event creation should be limited to officers.
 - Add a command to reopen events or edit slot counts.
 - Add richer loot rules if future rules should weight winners, exclude prior winners, or require approval.

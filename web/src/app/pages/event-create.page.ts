@@ -124,10 +124,6 @@ export class EventCreatePage implements OnInit {
         return;
       }
 
-      if (typeof event.ownerKey === "string" && event.ownerKey) {
-        this.api.rememberOwnerKey(eventId, event.ownerKey);
-      }
-
       const eventName = typeof event.name === "string" && event.name.trim() ? event.name : input.name.trim();
       this.createdEvent = { id: eventId, name: eventName || "Untitled event" };
       this.form = {
