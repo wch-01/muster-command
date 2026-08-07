@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { randomBytes } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db.js";
 import { createEvent, endEvent, eventInclude } from "./events/event-service.js";
@@ -7,7 +6,7 @@ import { addLootItems, drawRaffleByEventId, lootInclude } from "./loot/loot-serv
 import { type SlotPresetName, slotPresets, type SlotSeed } from "./slot-presets.js";
 import type { AuthenticatedUser } from "./auth.js";
 import { notifyEventsChanged } from "./event-stream.js";
-import { botGuildTextChannels } from "./bot-runtime.js";
+import { botGuildTextChannels, publishEventPanel, publishLootPanel } from "./bot-runtime.js";
 
 const json = (response: ServerResponse, statusCode: number, data: unknown) => {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
@@ -62,8 +61,6 @@ const parseItems = (value: unknown) => {
 
   return [];
 };
-
-const createOwnerWebKey = () => randomBytes(32).toString("hex");
 
 const defaultCombatOpTemplate: SlotSeed[] = [
   { category: "Capital ship 1", assignmentGroup: "ship", label: "Big ship captain", capacity: 1 },
@@ -132,14 +129,9 @@ const ensureDefaultTemplate = async (guildId: string) => {
   });
 };
 
-const removeOwnerWebKey = <T extends { ownerWebKey?: string | null }>(event: T) => {
-  const { ownerWebKey, ...safeEvent } = event;
-  return safeEvent;
-};
-
 const eventDetails = async (
   eventId: string,
-  context: { ownerKey?: string; userId?: string } = {},
+  context: { userId?: string } = {},
 ) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -170,10 +162,12 @@ const eventDetails = async (
     })),
   );
 
-  const isOwner = event.ownerWebKey ? context.ownerKey === event.ownerWebKey : false;
+  const isOwner = Boolean(context.userId && event.createdById === context.userId);
   const participantIds = new Set(members.map((member) => member.id));
+  const myAssignmentGroups = context.userId
+    ? [...new Set(members.filter((member) => member.id === context.userId).map((member) => member.group))]
+    : [];
   const participantsWithBid = new Set(members.filter((member) => member.hasBid).map((member) => member.id));
-  const safeEvent = removeOwnerWebKey(event);
   const raffles = event.raffles.map((raffle) => ({
     ...raffle,
     items: raffle.items.map((item) => ({
@@ -188,10 +182,11 @@ const eventDetails = async (
   }));
 
   return {
-    ...safeEvent,
+    ...event,
     raffles,
     isOwner,
     members,
+    myAssignmentGroups,
     participantCount: participantIds.size,
     participantsWithBidCount: participantsWithBid.size,
     canAddLoot: Boolean(context.userId && participantIds.has(context.userId)),
@@ -445,7 +440,7 @@ export const handleApiRequest = async (
         take: 50,
       });
 
-      json(response, 200, events.map(removeOwnerWebKey));
+      json(response, 200, events);
       return true;
     }
 
@@ -465,7 +460,6 @@ export const handleApiRequest = async (
         preset?: SlotPresetName | "custom";
         customSlots?: string;
         guildId?: string;
-        channelId?: string;
       }>(request).catch(() => ({}) as any);
 
       if (!body || !body.name || !body.name.trim()) {
@@ -486,7 +480,8 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const ownerKey = createOwnerWebKey();
+      const guildId = activeGuildId ?? body.guildId ?? "";
+
       if (!user || !activeGuildProfileName) {
         json(response, 400, {
           error: "Select a server where the bot can read your Discord server profile before creating events.",
@@ -495,11 +490,9 @@ export const handleApiRequest = async (
       }
 
       const event = await createEvent({
-        guildId: activeGuildId ?? body.guildId ?? "web",
-        channelId: body.channelId ?? "web",
+        guildId,
         createdById: user.id,
         createdByName: activeGuildProfileName,
-        ownerWebKey: ownerKey,
         name: body.name.trim(),
         description: body.description?.trim() || undefined,
         logoUrl: body.logoUrl?.trim() || undefined,
@@ -510,6 +503,8 @@ export const handleApiRequest = async (
       }).catch((error) => {
         throw new Error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`);
       });
+
+      await publishEventPanel(event.id);
 
       console.log(`Created web event ${event.id} in ${Date.now() - startedAt}ms.`);
       jsonAndNotifyEventsChanged(
@@ -529,7 +524,6 @@ export const handleApiRequest = async (
           raffles: [],
           members: [],
           isOwner: true,
-          ownerKey,
         },
       );
       return true;
@@ -537,8 +531,7 @@ export const handleApiRequest = async (
 
     const eventMatch = url.pathname.match(/^\/api\/events\/([^/]+)$/);
     if (request.method === "GET" && eventMatch) {
-      const ownerKey = url.searchParams.get("ownerKey") ?? undefined;
-      const event = await eventDetails(eventMatch[1], { ownerKey, userId: user?.id });
+      const event = await eventDetails(eventMatch[1], { userId: user?.id });
       if (!event) {
         json(response, 404, { error: "Event not found." });
         return true;
@@ -550,32 +543,36 @@ export const handleApiRequest = async (
 
     const endEventMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/end$/);
     if (request.method === "POST" && endEventMatch) {
-      const body = await readJsonBody<{ ownerKey?: string }>(request);
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
       const event = await prisma.event.findUnique({ where: { id: endEventMatch[1] } });
       if (!event) {
         json(response, 404, { error: "Event not found." });
         return true;
       }
 
-      if (!event.ownerWebKey || event.ownerWebKey !== body.ownerKey) {
+      if (event.createdById !== user.id) {
         json(response, 403, { error: "Only the event owner can end this event." });
         return true;
       }
 
       await endEvent(event.id);
+      await publishEventPanel(event.id);
+      await publishLootPanel(event.id);
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(event.id, { ownerKey: body.ownerKey, userId: user?.id }),
+        await eventDetails(event.id, { userId: user.id }),
       );
       return true;
     }
 
     const joinSlotMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/slots\/([^/]+)\/join$/);
     if (request.method === "POST" && joinSlotMatch) {
-      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
-        () => ({}) as { ownerKey?: string },
-      );
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -660,19 +657,45 @@ export const handleApiRequest = async (
         });
       });
 
+      await publishEventPanel(slot.eventId);
+
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(slot.eventId, { ownerKey: body.ownerKey, userId: user.id }),
+        await eventDetails(slot.eventId, { userId: user.id }),
+      );
+      return true;
+    }
+
+    const leaveGroupMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/leave\/(ship|ground)$/);
+    if (request.method === "POST" && leaveGroupMatch) {
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      await prisma.crewAssignment.deleteMany({
+        where: {
+          eventId: leaveGroupMatch[1],
+          discordUserId: user.id,
+          assignmentGroup: leaveGroupMatch[2],
+        },
+      });
+
+      await publishEventPanel(leaveGroupMatch[1]);
+
+      jsonAndNotifyEventsChanged(
+        response,
+        200,
+        await eventDetails(leaveGroupMatch[1], { userId: user.id }),
       );
       return true;
     }
 
     const leaveEventMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/leave$/);
     if (request.method === "POST" && leaveEventMatch) {
-      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
-        () => ({}) as { ownerKey?: string },
-      );
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -685,24 +708,31 @@ export const handleApiRequest = async (
         },
       });
 
+      await publishEventPanel(leaveEventMatch[1]);
+
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(leaveEventMatch[1], { ownerKey: body.ownerKey, userId: user.id }),
+        await eventDetails(leaveEventMatch[1], { userId: user.id }),
       );
       return true;
     }
 
     const drawLootMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/loot\/draw$/);
     if (request.method === "POST" && drawLootMatch) {
-      const body = await readJsonBody<{ ownerKey?: string }>(request);
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
       const event = await prisma.event.findUnique({ where: { id: drawLootMatch[1] } });
       if (!event) {
         json(response, 404, { error: "Event not found." });
         return true;
       }
 
-      if (!event.ownerWebKey || event.ownerWebKey !== body.ownerKey) {
+      if (event.createdById !== user.id) {
         json(response, 403, { error: "Only the event owner can roll this loot pool." });
         return true;
       }
@@ -713,17 +743,19 @@ export const handleApiRequest = async (
         return true;
       }
 
+      await publishLootPanel(event.id);
+
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(event.id, { ownerKey: body.ownerKey, userId: user?.id }),
+        await eventDetails(event.id, { userId: user.id }),
       );
       return true;
     }
 
     const addLootMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/loot\/items$/);
     if (request.method === "POST" && addLootMatch) {
-      const body = await readJsonBody<{ items?: string[] | string; ownerKey?: string }>(request);
+      const body = await readJsonBody<{ items?: string[] | string }>(request);
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -763,19 +795,19 @@ export const handleApiRequest = async (
         return true;
       }
 
+      await publishLootPanel(addLootMatch[1]);
+
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(addLootMatch[1], { ownerKey: body.ownerKey, userId: user.id }),
+        await eventDetails(addLootMatch[1], { userId: user.id }),
       );
       return true;
     }
 
     const bidLootMatch = url.pathname.match(/^\/api\/loot\/items\/([^/]+)\/bid$/);
     if (request.method === "POST" && bidLootMatch) {
-      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
-        () => ({}) as { ownerKey?: string },
-      );
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -831,19 +863,19 @@ export const handleApiRequest = async (
         });
       }
 
+      await publishLootPanel(item.eventId);
+
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(item.eventId, { ownerKey: body.ownerKey, userId: user.id }),
+        await eventDetails(item.eventId, { userId: user.id }),
       );
       return true;
     }
 
     const deleteLootMatch = url.pathname.match(/^\/api\/loot\/items\/([^/]+)$/);
     if (request.method === "DELETE" && deleteLootMatch) {
-      const body = await readJsonBody<{ ownerKey?: string }>(request).catch(
-        () => ({}) as { ownerKey?: string },
-      );
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -858,7 +890,7 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const isOwner = Boolean(item.raffle.event.ownerWebKey && item.raffle.event.ownerWebKey === body.ownerKey);
+      const isOwner = item.raffle.event.createdById === user.id;
       if (!isOwner && item.addedById !== user.id) {
         json(response, 403, { error: "Only the item creator or event owner can delete this loot item." });
         return true;
@@ -866,10 +898,11 @@ export const handleApiRequest = async (
 
       await prisma.lootItem.delete({ where: { id: item.id } });
       await updateLootSortOrders(item.eventId, item.lootRaffleId);
+      await publishLootPanel(item.eventId);
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(item.eventId, { ownerKey: body.ownerKey, userId: user.id }),
+        await eventDetails(item.eventId, { userId: user.id }),
       );
       return true;
     }

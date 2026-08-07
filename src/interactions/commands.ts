@@ -88,10 +88,11 @@ const handleEventCommand = async (interaction: ChatInputCommandInteraction) => {
       customSlots: interaction.options.getString("custom_slots") ?? undefined,
     });
 
-    await interaction.editReply({
+    const message = await interaction.editReply({
       embeds: [eventEmbed(event)],
       components: eventComponents(event),
     });
+    await prisma.event.update({ where: { id: event.id }, data: { messageId: message.id } });
     return;
   }
 
@@ -131,6 +132,11 @@ const handleEventCommand = async (interaction: ChatInputCommandInteraction) => {
     await interaction.deferReply({ ephemeral: true });
 
     const eventId = interaction.options.getString("event_id", true);
+    const existingEvent = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!existingEvent || existingEvent.createdById !== interaction.user.id) {
+      await interaction.editReply("Only the event owner can end this event.");
+      return;
+    }
     const event = await endEvent(eventId);
     const raffle = await getRaffleByEventId(eventId);
 
@@ -157,6 +163,11 @@ const handleLootCommand = async (interaction: ChatInputCommandInteraction) => {
     await interaction.deferReply();
 
     const eventId = interaction.options.getString("event_id", true);
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event || event.createdById !== interaction.user.id) {
+      await interaction.editReply("Only the event owner can draw this loot pool.");
+      return;
+    }
     const raffle = await drawRaffleByEventId(eventId);
     if (!raffle) {
       await interaction.editReply("I could not find a loot pool for that event ID.");

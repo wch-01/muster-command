@@ -60,15 +60,14 @@ export type EventSummary = {
 export type EventDetails = EventSummary & {
   isOwner: boolean;
   members: EventMember[];
+  myAssignmentGroups: Array<"ship" | "ground" | "extra">;
   raffles: LootRaffle[];
   participantCount: number;
   participantsWithBidCount: number;
   canAddLoot: boolean;
 };
 
-export type CreatedEventDetails = EventDetails & {
-  ownerKey: string;
-};
+export type CreatedEventDetails = EventDetails;
 
 export type CreateEventInput = {
   name: string;
@@ -189,9 +188,7 @@ export class ApiService {
   }
 
   getEvent(id: string) {
-    const ownerKey = this.ownerKeyForEvent(id);
-    const suffix = ownerKey ? `?ownerKey=${encodeURIComponent(ownerKey)}` : "";
-    return this.http.get<EventDetails>(`/api/events/${id}${suffix}`);
+    return this.http.get<EventDetails>(`/api/events/${id}`);
   }
 
   createEvent(input: CreateEventInput) {
@@ -217,63 +214,40 @@ export class ApiService {
   addLootItems(eventId: string, items: string) {
     return this.http.post<EventDetails>(`/api/events/${eventId}/loot/items`, {
       items,
-      ownerKey: this.ownerKeyForEvent(eventId),
     });
   }
 
   removeLootItem(eventId: string, itemId: string) {
     return this.http.request<EventDetails>("DELETE", `/api/loot/items/${itemId}`, {
-      body: { ownerKey: this.ownerKeyForEvent(eventId) },
+      body: {},
     });
   }
 
   drawLoot(eventId: string) {
-    return this.http.post<EventDetails>(`/api/events/${eventId}/loot/draw`, {
-      ownerKey: this.ownerKeyForEvent(eventId),
-    });
+    return this.http.post<EventDetails>(`/api/events/${eventId}/loot/draw`, {});
   }
 
   endEvent(eventId: string) {
-    return this.http.post<EventDetails>(`/api/events/${eventId}/end`, {
-      ownerKey: this.ownerKeyForEvent(eventId),
-    });
+    return this.http.post<EventDetails>(`/api/events/${eventId}/end`, {});
   }
 
   joinSlot(eventId: string, slotId: string) {
-    return this.http.post<EventDetails>(`/api/events/${eventId}/slots/${slotId}/join`, {
-      ownerKey: this.ownerKeyForEvent(eventId),
-    });
+    return this.http.post<EventDetails>(`/api/events/${eventId}/slots/${slotId}/join`, {});
   }
 
   leaveEvent(eventId: string) {
-    return this.http.post<EventDetails>(`/api/events/${eventId}/leave`, {
-      ownerKey: this.ownerKeyForEvent(eventId),
-    });
+    return this.http.post<EventDetails>(`/api/events/${eventId}/leave`, {});
+  }
+
+  getGuildChannels() {
+    return this.http.get<{ channels: Array<{ id: string; name: string; type: string }> }>("/api/guild/channels");
+  }
+
+  leaveGroup(eventId: string, group: "ship" | "ground") {
+    return this.http.post<EventDetails>(`/api/events/${eventId}/leave/${group}`, {});
   }
 
   toggleLootBid(eventId: string, itemId: string) {
-    return this.http.post<EventDetails>(`/api/loot/items/${itemId}/bid`, {
-      ownerKey: this.ownerKeyForEvent(eventId),
-    });
-  }
-
-  rememberOwnerKey(eventId: string, ownerKey: string) {
-    try {
-      localStorage.setItem(this.ownerStorageKey(eventId), ownerKey);
-    } catch (error) {
-      console.warn("Could not save event owner key to local storage:", error);
-    }
-  }
-
-  ownerKeyForEvent(eventId: string) {
-    try {
-      return localStorage.getItem(this.ownerStorageKey(eventId)) ?? "";
-    } catch (error) {
-      return "";
-    }
-  }
-
-  private ownerStorageKey(eventId: string) {
-    return `star-citizen-event-owner:${eventId}`;
+    return this.http.post<EventDetails>(`/api/loot/items/${itemId}/bid`, {});
   }
 }

@@ -127,6 +127,17 @@ export class EventDetailPage implements OnInit, OnDestroy {
     this.runEventAction("leave", this.api.leaveEvent(this.id));
   }
 
+  hasMyAssignment(group: AssignmentGroup) {
+    return this.event?.myAssignmentGroups.includes(group) ?? false;
+  }
+
+  leaveGroup(group: AssignmentGroup) {
+    if (group === "extra") {
+      return;
+    }
+    this.runEventAction(`leave-${group}`, this.api.leaveGroup(this.id, group));
+  }
+
   endEvent() {
     this.runEventAction("end", this.api.endEvent(this.id));
   }

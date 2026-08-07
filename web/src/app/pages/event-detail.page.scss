@@ -8,6 +8,7 @@
 }
 
 .event-hero,
+.event-controls,
 .loot-modal,
 .loot-item {
   border: 1px solid #d8dee9;
@@ -19,9 +20,8 @@
   padding: 16px;
 }
 
-.event-heading,
+.event-controls,
 .loot-header,
-.event-actions,
 .loot-add {
   display: flex;
   align-items: center;
@@ -30,14 +30,35 @@
   flex-wrap: wrap;
 }
 
-.event-heading .toolbar-actions {
+.event-controls .toolbar-actions {
   justify-content: flex-end;
 }
 
-.event-heading h1,
+.event-controls h1,
 .loot-header h2,
 .loot-item h3 {
   margin: 0;
+}
+
+.event-controls {
+  padding: 12px 16px;
+}
+
+.event-controls p {
+  margin: 4px 0 0;
+}
+
+.modal-detail-content .event-controls {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
+}
+
+.group-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
 }
 
 .event-meta {

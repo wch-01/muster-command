@@ -5,11 +5,11 @@ CREATE TYPE "RaffleStatus" AS ENUM ('OPEN', 'DRAWN');
 CREATE TABLE "Event" (
   "id" TEXT NOT NULL,
   "guildId" TEXT NOT NULL,
-  "channelId" TEXT NOT NULL,
+  "channelId" TEXT,
+  "messageId" TEXT,
   "reportChannelId" TEXT,
   "createdById" TEXT NOT NULL,
   "createdByName" TEXT NOT NULL,
-  "ownerWebKey" TEXT,
   "name" TEXT NOT NULL,
   "description" TEXT,
   "logoUrl" TEXT,
@@ -47,7 +47,7 @@ CREATE TABLE "CrewAssignment" (
 CREATE TABLE "LootRaffle" (
   "id" TEXT NOT NULL,
   "eventId" TEXT NOT NULL,
-  "channelId" TEXT NOT NULL,
+  "channelId" TEXT,
   "messageId" TEXT,
   "name" TEXT NOT NULL,
   "endsAt" TIMESTAMP(3),
@@ -80,7 +80,6 @@ CREATE TABLE "LootBid" (
   CONSTRAINT "LootBid_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "Event_ownerWebKey_key" ON "Event"("ownerWebKey");
 CREATE UNIQUE INDEX "CrewAssignment_eventId_discordUserId_assignmentGroup_key"
 ON "CrewAssignment"("eventId", "discordUserId", "assignmentGroup");
 CREATE UNIQUE INDEX "LootBid_lootItemId_discordUserId_key" ON "LootBid"("lootItemId", "discordUserId");

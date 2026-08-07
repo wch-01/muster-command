@@ -27,6 +27,7 @@ export type DiscordSettings = {
   discordClientSecret?: string;
   adminDiscordUserIds?: string;
   eventOutputMode?: "channel" | "thread";
+  discordEventPublishingEnabled?: boolean;
   eventOutputChannelId?: string;
   lootOutputChannelId?: string;
   threadAutoDeleteDays?: number;

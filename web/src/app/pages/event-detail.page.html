@@ -2,22 +2,27 @@
 
 <ion-content [class.modal-detail-content]="modalMode">
   <main class="page-shell event-detail" *ngIf="event; else loading">
+    <section class="event-controls">
+      <div>
+        <h1>{{ event.name }}</h1>
+        <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
+      </div>
+      <div class="toolbar-actions">
+        <ion-button color="secondary" (click)="lootOpen = true">Loot</ion-button>
+        <ion-button *ngIf="event.isOwner" color="danger" fill="outline" (click)="endEvent()" [disabled]="event.status !== 'OPEN' || busyAction === 'end'">
+          {{ busyAction === "end" ? "Ending..." : "End Event" }}
+        </ion-button>
+        <ion-button fill="outline" color="medium" (click)="leaveEvent()" [disabled]="busyAction === 'leave'">
+          {{ busyAction === "leave" ? "Leaving..." : "Leave Event" }}
+        </ion-button>
+        <ion-button fill="outline" (click)="loadEvent()">Refresh</ion-button>
+        <span class="status-pill">{{ event.status }}</span>
+        <ion-button *ngIf="modalMode" fill="clear" color="medium" (click)="closeRequested.emit()">Close</ion-button>
+      </div>
+    </section>
+
     <section class="event-hero">
       <img *ngIf="event.logoUrl" class="event-logo" [src]="event.logoUrl" [alt]="event.name" />
-      <div class="event-heading">
-        <div>
-          <h1>{{ event.name }}</h1>
-          <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
-        </div>
-        <div class="toolbar-actions">
-          <ion-button color="secondary" (click)="lootOpen = true">Loot</ion-button>
-          <ion-button *ngIf="event.isOwner" color="danger" fill="outline" (click)="endEvent()" [disabled]="event.status !== 'OPEN' || busyAction === 'end'">
-            {{ busyAction === "end" ? "Ending..." : "End Event" }}
-          </ion-button>
-          <span class="status-pill">{{ event.status }}</span>
-          <ion-button *ngIf="modalMode" fill="clear" color="medium" (click)="closeRequested.emit()">Close</ion-button>
-        </div>
-      </div>
       <p *ngIf="event.description">{{ event.description }}</p>
       <div class="event-meta">
         <span>Owner: {{ event.createdByName }}</span>
@@ -38,7 +43,19 @@
               Extra crew opens when all listed fleet and ground roles are full.
             </p>
           </div>
-          <ion-badge *ngIf="group === 'extra' && isExtraLocked()" color="medium">Locked</ion-badge>
+          <div class="group-actions">
+            <ion-badge *ngIf="group === 'extra' && isExtraLocked()" color="medium">Locked</ion-badge>
+            <ion-button
+              *ngIf="group !== 'extra' && hasMyAssignment(group)"
+              size="small"
+              fill="outline"
+              color="medium"
+              (click)="leaveGroup(group)"
+              [disabled]="busyAction === 'leave-' + group"
+            >
+              {{ busyAction === "leave-" + group ? "Leaving..." : "Leave " + groupTitle(group) }}
+            </ion-button>
+          </div>
         </header>
 
         <div class="slot-list" *ngIf="groupedSlots(group).length; else noSlots">
@@ -64,12 +81,6 @@
       </article>
     </section>
 
-    <section class="event-actions">
-      <ion-button fill="outline" color="medium" (click)="leaveEvent()" [disabled]="busyAction === 'leave'">
-        {{ busyAction === "leave" ? "Leaving..." : "Leave Event" }}
-      </ion-button>
-      <ion-button fill="outline" (click)="loadEvent()">Refresh</ion-button>
-    </section>
   </main>
 
   <ng-template #loading>
