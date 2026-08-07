@@ -1,9 +1,12 @@
-<app-menu *ngIf="!modalMode" active="active-events" />
+<app-menu [active]="menuActive" />
 
-<ion-content [class.modal-detail-content]="modalMode">
+<ion-content>
   <main class="page-shell event-detail" *ngIf="event; else loading">
     <section class="event-controls">
       <div>
+        <ion-button class="back-button" fill="clear" color="medium" size="small" (click)="backToSource()">
+          &larr; {{ backLabel }}
+        </ion-button>
         <h1>{{ event.name }}</h1>
         <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
       </div>
@@ -17,7 +20,6 @@
         </ion-button>
         <ion-button fill="outline" (click)="loadEvent()">Refresh</ion-button>
         <span class="status-pill">{{ event.status }}</span>
-        <ion-button *ngIf="modalMode" fill="clear" color="medium" (click)="closeRequested.emit()">Close</ion-button>
       </div>
     </section>
 

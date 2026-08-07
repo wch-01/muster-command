@@ -1,6 +1,7 @@
-import { CommonModule, DatePipe } from "@angular/common";
-import { ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output } from "@angular/core";
+import { CommonModule, DatePipe, Location } from "@angular/common";
+import { ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { ActivatedRoute, Router } from "@angular/router";
 import {
   IonBadge,
   IonButton,
@@ -38,10 +39,10 @@ type AssignmentGroup = "ship" | "ground" | "extra";
 })
 export class EventDetailPage implements OnInit, OnDestroy {
   @Input() id = "";
-  @Input() modalMode = false;
-  @Input() initialLootOpen = false;
-  @Output() closeRequested = new EventEmitter<void>();
   groups: AssignmentGroup[] = ["ship", "ground", "extra"];
+  backLabel = "Back to Active Events";
+  backPath = "/active-events";
+  menuActive = "active-events";
   event?: EventDetails;
   error = "";
   lootError = "";
@@ -52,10 +53,15 @@ export class EventDetailPage implements OnInit, OnDestroy {
 
   constructor(
     private readonly api: ApiService,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
+    private readonly location: Location,
     private readonly changeDetector: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
+    this.configureOrigin();
+    this.lootOpen = this.route.snapshot.queryParamMap.get("loot") === "1";
     this.loadEvent();
     this.stream = new EventSource("/api/events/stream");
     this.stream.addEventListener("events-changed", () => this.loadEvent());
@@ -82,9 +88,6 @@ export class EventDetailPage implements OnInit, OnDestroy {
     this.api.getEvent(this.id).subscribe({
       next: (event) => {
         this.event = event;
-        if (this.initialLootOpen) {
-          this.lootOpen = true;
-        }
         this.changeDetector.detectChanges();
       },
       error: (error) => {
@@ -125,6 +128,36 @@ export class EventDetailPage implements OnInit, OnDestroy {
 
   leaveEvent() {
     this.runEventAction("leave", this.api.leaveEvent(this.id));
+  }
+
+  backToSource() {
+    if (this.event && this.backPath !== "/dashboard") {
+      try {
+        sessionStorage.setItem("muster-event-return-highlight", this.event.id);
+      } catch {
+        // Navigation remains functional if storage is unavailable.
+      }
+    }
+
+    if (window.history.length > 1) {
+      this.location.back();
+      return;
+    }
+
+    void this.router.navigateByUrl(this.backPath);
+  }
+
+  private configureOrigin() {
+    const source = this.route.snapshot.queryParamMap.get("from");
+    if (source === "dashboard") {
+      this.backLabel = "Back to Dashboard";
+      this.backPath = "/dashboard";
+      this.menuActive = "dashboard";
+    } else if (source === "past-events") {
+      this.backLabel = "Back to Past Events";
+      this.backPath = "/past-events";
+      this.menuActive = "past-events";
+    }
   }
 
   hasMyAssignment(group: AssignmentGroup) {
