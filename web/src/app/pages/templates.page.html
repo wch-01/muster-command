@@ -62,54 +62,67 @@
 
       <section class="crew-builder">
         <div class="builder-heading">
-          <h3>Fleet</h3>
-          <button class="mini-button primary" type="button" (click)="addShip()" [disabled]="!editing">Add ship</button>
+          <h3>Fleets</h3>
         </div>
 
-        <article class="builder-card" *ngFor="let ship of draft.ships; let shipIndex = index">
+        <article class="builder-card" *ngFor="let fleet of draft.fleets; let fleetIndex = index">
           <header>
-            <h4>Ship {{ shipIndex + 1 }}</h4>
-            <button class="mini-button danger" type="button" (click)="removeShip(shipIndex)" [disabled]="!editing">Remove Ship</button>
+            <h4>{{ fleet.name || "Fleet " + (fleetIndex + 1) }}</h4>
+            <button class="mini-button danger" type="button" (click)="removeFleet(fleetIndex)" [disabled]="!editing">Remove Fleet</button>
           </header>
           <div class="builder-grid">
             <label class="field-label">
-              Ship Type
-              <input type="text" [(ngModel)]="ship.name" [disabled]="!editing" />
+              Fleet Name
+              <input type="text" [(ngModel)]="fleet.name" [disabled]="!editing" />
             </label>
             <label class="field-label">
-              Crew Count
-              <input type="number" min="1" max="25" [(ngModel)]="ship.crewCount" [disabled]="!editing" />
+              Starts
+              <select [(ngModel)]="fleet.scheduleMode" [disabled]="!editing">
+                <option value="EVENT_START">At event start</option>
+                <option value="SPECIFIC_TIME">At a specific time</option>
+                <option value="AFTER_GROUP">After another group completes</option>
+                <option value="AS_DIRECTED">As directed</option>
+              </select>
             </label>
           </div>
-          <div class="role-row header-row">
-            <strong>Role</strong>
-            <strong>Slots</strong>
-            <span></span>
-          </div>
-          <div class="role-row" *ngFor="let role of ship.roles; let roleIndex = index">
-            <label class="field-label">
-              Role
-              <input type="text" [(ngModel)]="role.label" [disabled]="!editing" />
-            </label>
-            <label class="field-label">
-              Slots
-              <input type="number" min="1" max="25" [(ngModel)]="role.capacity" [disabled]="!editing" />
-            </label>
-            <button class="mini-button danger" type="button" (click)="removeRole(ship, roleIndex)" [disabled]="!editing">Remove</button>
-          </div>
-          <div class="builder-footer">
-            <span class="muted">Assigned Role Slots: {{ roleTotal(ship.roles) }} / Crew Count: {{ ship.crewCount }}</span>
-            <button class="mini-button" type="button" (click)="addRole(ship)" [disabled]="!editing">Add Role</button>
-          </div>
+          <label class="field-label" *ngIf="fleet.scheduleMode === 'SPECIFIC_TIME'">
+            Fleet Start Time
+            <input type="datetime-local" [(ngModel)]="fleet.startsAt" [disabled]="!editing" />
+            <small>Timezone: {{ timeZoneLabel }}</small>
+          </label>
+          <label class="field-label" *ngIf="fleet.scheduleMode === 'AFTER_GROUP'">
+            Starts After
+            <select [(ngModel)]="fleet.predecessorClientId" [disabled]="!editing"><option value="">Select group</option><option *ngFor="let group of predecessorChoices(fleet)" [value]="group.clientId">{{ group.name }}</option></select>
+          </label>
+          <label class="field-label">
+            Timing Note <span class="optional-label">optional</span>
+            <input type="text" [(ngModel)]="fleet.timingNote" [disabled]="!editing" placeholder="Rally instructions or timing details" />
+          </label>
+
+          <section class="ship-section" *ngFor="let ship of fleet.ships; let shipIndex = index">
+            <header><h4>{{ ship.name || "Ship " + (shipIndex + 1) }}</h4><button class="mini-button danger" type="button" (click)="removeShip(fleet, shipIndex)" [disabled]="!editing">Remove Ship</button></header>
+            <div class="builder-grid">
+              <label class="field-label">Ship Name/Type<input type="text" [(ngModel)]="ship.name" [disabled]="!editing" /></label>
+              <label class="field-label">Crew Count<input type="number" min="1" max="25" [(ngModel)]="ship.crewCount" [disabled]="!editing" /></label>
+            </div>
+            <div class="role-row header-row"><strong>Role</strong><strong>Slots</strong><span></span></div>
+            <div class="role-row" *ngFor="let role of ship.roles; let roleIndex = index">
+              <label class="field-label">Role<input type="text" [(ngModel)]="role.label" [disabled]="!editing" /></label>
+              <label class="field-label">Slots<input type="number" min="1" max="25" [(ngModel)]="role.capacity" [disabled]="!editing" /></label>
+              <button class="mini-button danger" type="button" (click)="removeRole(ship, roleIndex)" [disabled]="!editing">Remove</button>
+            </div>
+            <div class="builder-footer"><span class="muted">Role Slots: {{ roleTotal(ship.roles) }} / Crew: {{ ship.crewCount }}</span><button class="mini-button" type="button" (click)="addRole(ship)" [disabled]="!editing">Add Role</button></div>
+          </section>
+          <button class="mini-button" type="button" (click)="addShip(fleet)" [disabled]="!editing">Add Ship</button>
         </article>
 
-        <p class="muted" *ngIf="!draft.ships.length">No ships added.</p>
+        <p class="muted" *ngIf="!draft.fleets.length">No fleets added.</p>
+        <button class="mini-button primary section-add-button" type="button" (click)="addFleet()" [disabled]="!editing">+ Add Fleet</button>
       </section>
 
       <section class="crew-builder">
         <div class="builder-heading">
           <h3>Ground Teams</h3>
-          <button class="mini-button primary" type="button" (click)="addGroundTeam()" [disabled]="!editing">Add ground team</button>
         </div>
 
         <article class="builder-card" *ngFor="let team of draft.groundTeams; let teamIndex = index">
@@ -123,10 +136,29 @@
               <input type="text" [(ngModel)]="team.name" [disabled]="!editing" />
             </label>
             <label class="field-label">
+              Starts
+              <select [(ngModel)]="team.scheduleMode" [disabled]="!editing">
+                <option value="EVENT_START">At event start</option>
+                <option value="SPECIFIC_TIME">At a specific time</option>
+                <option value="AFTER_GROUP">After another group completes</option>
+                <option value="AS_DIRECTED">As directed</option>
+              </select>
+            </label>
+            <label class="field-label">
               Crew Count
               <input type="number" min="1" max="25" [(ngModel)]="team.crewCount" [disabled]="!editing" />
             </label>
           </div>
+          <label class="field-label" *ngIf="team.scheduleMode === 'SPECIFIC_TIME'">
+            Team Start Time
+            <input type="datetime-local" [(ngModel)]="team.startsAt" [disabled]="!editing" />
+            <small>Timezone: {{ timeZoneLabel }}</small>
+          </label>
+          <label class="field-label" *ngIf="team.scheduleMode === 'AFTER_GROUP'">Starts After<select [(ngModel)]="team.predecessorClientId" [disabled]="!editing"><option value="">Select group</option><option *ngFor="let group of predecessorChoices(team)" [value]="group.clientId">{{ group.name }}</option></select></label>
+          <label class="field-label">
+            Timing Note <span class="optional-label">optional</span>
+            <input type="text" [(ngModel)]="team.timingNote" [disabled]="!editing" placeholder="Task completion cue or rally instructions" />
+          </label>
           <div class="role-row header-row">
             <strong>Role</strong>
             <strong>Slots</strong>
@@ -150,6 +182,7 @@
         </article>
 
         <p class="muted" *ngIf="!draft.groundTeams.length">No ground teams added.</p>
+        <button class="mini-button primary section-add-button" type="button" (click)="addGroundTeam()" [disabled]="!editing">+ Add Ground Team</button>
       </section>
 
       <div class="error-panel" *ngIf="error">{{ error }}</div>

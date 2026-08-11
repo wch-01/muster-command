@@ -14,6 +14,7 @@ import {
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { ApiService, type EventDetails, type LootItem } from "../services/api.service";
+import { browserTimeZoneLabel } from "../utils/event-time";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
 
@@ -38,6 +39,7 @@ type AssignmentGroup = "ship" | "ground" | "extra";
   styleUrls: ["./event-detail.page.scss"],
 })
 export class EventDetailPage implements OnInit, OnDestroy {
+  readonly timeZoneLabel = browserTimeZoneLabel();
   @Input() id = "";
   groups: AssignmentGroup[] = ["ship", "ground", "extra"];
   backLabel = "Back to Active Events";
@@ -81,6 +83,23 @@ export class EventDetailPage implements OnInit, OnDestroy {
 
   get bidProgress() {
     return `${this.event?.participantsWithBidCount ?? 0}/${this.event?.participantCount ?? 0}`;
+  }
+
+  get lootEligibilityMessage() {
+    switch (this.event?.lootEligibility) {
+      case "LOGIN_REQUIRED":
+        return "Log in with Discord to use this loot pool.";
+      case "PROFILE_UNAVAILABLE":
+        return "Select a server where the bot can read your Discord profile before adding loot or bidding.";
+      case "NOT_PARTICIPANT":
+        return "Join any role in this event before adding loot or bidding.";
+      case "POOL_DRAWN":
+        return "This loot pool has been drawn and is now closed.";
+      case "ALLOWED":
+        return "Participants can add loot before or after the event ends, until the pool is drawn.";
+      default:
+        return "Loot availability could not be determined.";
+    }
   }
 
   loadEvent() {

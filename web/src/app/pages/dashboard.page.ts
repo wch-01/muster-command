@@ -3,6 +3,7 @@ import { ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
 import { IonContent } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { ApiService, type DashboardServer } from "../services/api.service";
+import { browserTimeZoneLabel } from "../utils/event-time";
 
 @Component({
   selector: "app-dashboard-page",
@@ -12,6 +13,7 @@ import { ApiService, type DashboardServer } from "../services/api.service";
   styleUrls: ["./dashboard.page.scss"],
 })
 export class DashboardPage implements OnInit, OnDestroy {
+  readonly timeZoneLabel = browserTimeZoneLabel();
   servers: DashboardServer[] = [];
   error = "";
   botInviteUrl = "/bot-invite";

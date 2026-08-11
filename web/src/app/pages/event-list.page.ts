@@ -6,6 +6,7 @@ import { Subscription } from "rxjs";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { EventTabsComponent } from "../components/event-tabs.component";
 import { type EventSummary } from "../services/api.service";
+import { browserTimeZoneLabel } from "../utils/event-time";
 
 @Component({
   selector: "app-event-list-page",
@@ -15,6 +16,7 @@ import { type EventSummary } from "../services/api.service";
   styleUrls: ["./event-list.page.scss"],
 })
 export class EventListPage implements OnInit, OnDestroy {
+  readonly timeZoneLabel = browserTimeZoneLabel();
   @ViewChild(IonContent) private content?: IonContent;
   mode: "active" | "past" = "active";
   events: EventSummary[] = [];

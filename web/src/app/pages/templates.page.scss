@@ -154,25 +154,45 @@
 }
 
 .field-label {
-  color: #475569;
+  color: #334155;
   display: grid;
   font-size: 13px;
+  font-weight: 700;
   gap: 6px;
+  letter-spacing: 0.01em;
 }
 
-.field-label input {
+.field-label input,
+.field-label select {
   background: #ffffff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #94a3b8;
   border-radius: 8px;
   color: #0f172a;
   font: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
   min-width: 0;
   padding: 10px 12px;
 }
 
-.field-label input:disabled {
+.field-label input:focus,
+.field-label select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+  outline: 0;
+}
+
+.field-label input:disabled,
+.field-label select:disabled {
   background: #f1f5f9;
   color: #475569;
+}
+
+.field-label small,
+.optional-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .crew-builder {
@@ -180,9 +200,30 @@
   gap: 12px;
 }
 
+.section-add-button {
+  justify-self: start;
+}
+
 .builder-card {
   display: grid;
   gap: 12px;
+}
+
+.ship-section {
+  background: #f8fafc;
+  border-left: 4px solid #93c5fd;
+  border-radius: 0 8px 8px 0;
+  box-shadow: inset 0 1px 0 #e2e8f0, inset 0 -1px 0 #e2e8f0;
+  display: grid;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+}
+
+.ship-section header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
 }
 
 .builder-grid,
