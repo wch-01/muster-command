@@ -1,3 +1,13 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+ion-content {
+  min-height: 0;
+}
+
 .event-create-page { display: grid; gap: 18px; padding-bottom: 64px; }
 .create-card {
   --background: transparent;

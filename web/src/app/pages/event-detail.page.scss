@@ -1,5 +1,11 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+ion-content {
+  min-height: 0;
 }
 
 .event-detail {
@@ -197,6 +203,15 @@
   background: #f8fafc;
   border-left: 3px solid #94a3b8;
   color: #475569;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.conflict-note {
+  background: #fff1f2;
+  border-left: 3px solid #e11d48;
+  color: #9f1239;
+  font-weight: 700;
   margin: 0;
   padding: 8px 10px;
 }

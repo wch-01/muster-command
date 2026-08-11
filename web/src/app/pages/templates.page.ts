@@ -3,6 +3,7 @@ import { ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { IonContent } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
+import { SiteFooterComponent } from "../components/site-footer.component";
 import { ApiService, type ActivityGroupInput, type EventTemplateSummary, type SaveTemplateInput, type ScheduleMode } from "../services/api.service";
 import { browserTimeZoneLabel, isoToLocalDateTime, localDateTimeToIso } from "../utils/event-time";
 
@@ -40,7 +41,7 @@ type TemplateDraft = {
 @Component({
   selector: "app-templates-page",
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, AppMenuComponent],
+  imports: [CommonModule, FormsModule, IonContent, AppMenuComponent, SiteFooterComponent],
   templateUrl: "./templates.page.html",
   styleUrls: ["./templates.page.scss"],
 })

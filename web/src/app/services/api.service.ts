@@ -64,6 +64,7 @@ export type EventDetails = EventSummary & {
   members: EventMember[];
   myAssignmentGroups: Array<"ship" | "ground" | "extra">;
   myAssignmentGroupIds: string[];
+  signupConflicts: Record<string, string>;
   raffles: LootRaffle[];
   participantCount: number;
   participantsWithBidCount: number;

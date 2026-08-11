@@ -105,6 +105,13 @@ a {
   padding: 24px 0 40px;
 }
 
+.site-page-frame {
+  align-content: space-between;
+  display: grid;
+  grid-template-rows: auto auto;
+  min-height: 100%;
+}
+
 .toolbar-actions {
   display: flex;
   gap: 8px;

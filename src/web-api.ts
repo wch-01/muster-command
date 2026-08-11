@@ -14,6 +14,8 @@ import {
   normalizeActivityGroups,
   type ActivityGroupSeed,
 } from "./event-groups.js";
+import { assignUserToSlot } from "./events/assignment-service.js";
+import { findScheduleConflict, scheduleConflictMessage } from "./events/schedule-conflicts.js";
 
 const json = (response: ServerResponse, statusCode: number, data: unknown) => {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
@@ -205,6 +207,11 @@ const eventDetails = async (
       .filter((slot) => slot.groupId && slot.assignments.some((assignment) => assignment.discordUserId === context.userId))
       .map((slot) => slot.groupId!))]
     : [];
+  const myAssignedGroups = event.groups.filter((group) => myAssignmentGroupIds.includes(group.id));
+  const signupConflicts = Object.fromEntries(event.groups.flatMap((group) => {
+    const conflict = findScheduleConflict(group, myAssignedGroups.filter((assigned) => assigned.id !== group.id));
+    return conflict ? [[group.id, scheduleConflictMessage(conflict)]] : [];
+  }));
   const participantsWithBid = new Set(members.filter((member) => member.hasBid).map((member) => member.id));
   const eligibility = lootEligibility({
     isLoggedIn: Boolean(context.userId),
@@ -232,6 +239,7 @@ const eventDetails = async (
     members,
     myAssignmentGroups,
     myAssignmentGroupIds,
+    signupConflicts,
     participantCount: participantIds.size,
     participantsWithBidCount: participantsWithBid.size,
     canAddLoot: eligibility === "ALLOWED",
@@ -612,6 +620,7 @@ export const handleApiRequest = async (
           isOwner: true,
           myAssignmentGroups: [],
           myAssignmentGroupIds: [],
+          signupConflicts: {},
         },
       );
       return true;
@@ -673,84 +682,20 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const slot = await prisma.crewSlot.findUnique({
-        where: { id: joinSlotMatch[2] },
-        include: { event: true },
+      const assigned = await assignUserToSlot({
+        slotId: joinSlotMatch[2],
+        expectedEventId: joinSlotMatch[1],
+        expectedGuildId: activeGuildId,
+        discordUserId: user.id,
+        discordTag: activeGuildProfileName,
       });
 
-      if (!slot || slot.eventId !== joinSlotMatch[1] || slot.event.status !== "OPEN") {
-        json(response, 400, { error: "That signup slot is no longer open." });
-        return true;
-      }
-
-      if (activeGuildId && slot.event.guildId !== activeGuildId) {
-        json(response, 403, { error: "That event is not in your active server." });
-        return true;
-      }
-
-      if (slot.assignmentGroup === "extra") {
-        const regularSlots = await prisma.crewSlot.findMany({
-          where: {
-            eventId: slot.eventId,
-            assignmentGroup: { not: "extra" },
-          },
-          include: { assignments: true },
-        });
-        const regularSlotsFull =
-          regularSlots.length > 0 &&
-          regularSlots.every((regularSlot) => regularSlot.assignments.length >= regularSlot.capacity);
-
-        if (!regularSlotsFull) {
-          json(response, 400, { error: "Extra crew opens after the listed roles are full." });
-          return true;
-        }
-      }
-
-      await prisma.$transaction(async (tx) => {
-        if (slot.assignmentGroup !== "extra") {
-          const extraAssignment = await tx.crewAssignment.findFirst({
-            where: {
-              eventId: slot.eventId,
-              discordUserId: user.id,
-              assignmentGroup: "extra",
-            },
-          });
-
-          if (extraAssignment) {
-            throw new Error("Extra crew members can only stay in the extra crew area.");
-          }
-        }
-
-        await tx.crewAssignment.deleteMany({
-          where: {
-            eventId: slot.eventId,
-            discordUserId: user.id,
-            assignmentGroup: slot.assignmentGroup === "extra" ? undefined : slot.assignmentGroup,
-          },
-        });
-
-        const taken = await tx.crewAssignment.count({ where: { crewSlotId: slot.id } });
-        if (taken >= slot.capacity) {
-          throw new Error("That slot filled up just before you clicked it.");
-        }
-
-        await tx.crewAssignment.create({
-          data: {
-            eventId: slot.eventId,
-            crewSlotId: slot.id,
-            assignmentGroup: slot.assignmentGroup,
-            discordUserId: user.id,
-            discordTag: activeGuildProfileName,
-          },
-        });
-      });
-
-      await publishEventPanel(slot.eventId);
+      await publishEventPanel(assigned.eventId);
 
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(slot.eventId, eventContext),
+        await eventDetails(assigned.eventId, eventContext),
       );
       return true;
     }

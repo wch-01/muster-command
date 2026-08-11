@@ -1,6 +1,7 @@
 <app-menu active="templates" />
 
 <ion-content>
+  <div class="site-page-frame">
   <main class="page-shell templates-page">
     <header class="templates-header">
       <div>
@@ -42,6 +43,8 @@
       <button class="primary-action" type="button" (click)="openCreateModal()">Create new template</button>
     </section>
   </main>
+  <app-site-footer />
+  </div>
 </ion-content>
 
 <div class="modal-backdrop" *ngIf="modalOpen" (click)="closeModal()">

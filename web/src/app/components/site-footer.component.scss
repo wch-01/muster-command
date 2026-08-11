@@ -1,0 +1,43 @@
+:host {
+  display: block;
+}
+
+.site-footer {
+  align-items: center;
+  border-top: 1px solid #d7dde4;
+  background: #ffffff;
+  box-sizing: border-box;
+  color: #64748b;
+  display: flex;
+  height: 52px;
+  padding: 0 18px;
+}
+
+.site-footer-content {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin: 0 auto;
+  width: min(1180px, 100%);
+}
+
+.site-footer-contact {
+  display: flex;
+  gap: 18px;
+}
+
+.site-footer strong {
+  color: #334155;
+}
+
+@media (max-width: 640px) {
+  .site-footer-content {
+    font-size: 12px;
+    gap: 10px;
+  }
+
+  .site-footer-contact {
+    gap: 10px;
+  }
+}

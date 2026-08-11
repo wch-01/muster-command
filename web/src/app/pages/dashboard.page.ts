@@ -2,13 +2,14 @@ import { CommonModule, DatePipe } from "@angular/common";
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
 import { IonContent } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
+import { SiteFooterComponent } from "../components/site-footer.component";
 import { ApiService, type DashboardServer } from "../services/api.service";
 import { browserTimeZoneLabel } from "../utils/event-time";
 
 @Component({
   selector: "app-dashboard-page",
   standalone: true,
-  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent],
+  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, SiteFooterComponent],
   templateUrl: "./dashboard.page.html",
   styleUrls: ["./dashboard.page.scss"],
 })

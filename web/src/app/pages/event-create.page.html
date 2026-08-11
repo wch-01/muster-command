@@ -1,6 +1,7 @@
 <app-menu active="create-event" />
 
 <ion-content>
+  <div class="site-page-frame">
   <main class="page-shell event-create-page">
     <app-event-tabs active="create-event" />
 
@@ -194,4 +195,6 @@
       <section class="preview-group" *ngFor="let team of groundTeams"><h3>{{ team.name }}</h3><div class="slot-grid"><div class="slot-preview"><p class="muted" *ngFor="let role of team.roles">{{ role.label }} — {{ role.capacity }} slot{{ role.capacity === 1 ? "" : "s" }}</p></div></div></section>
     </section>
   </main>
+  <app-site-footer />
+  </div>
 </ion-content>

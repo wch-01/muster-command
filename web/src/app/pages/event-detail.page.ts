@@ -13,6 +13,7 @@ import {
   IonSpinner,
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
+import { SiteFooterComponent } from "../components/site-footer.component";
 import { ApiService, type EventDetails, type EventGroupSummary, type LootItem } from "../services/api.service";
 import { browserTimeZoneLabel } from "../utils/event-time";
 
@@ -26,6 +27,7 @@ type AssignmentGroup = "ship" | "ground" | "extra";
     DatePipe,
     FormsModule,
     AppMenuComponent,
+    SiteFooterComponent,
     IonBadge,
     IonButton,
     IonContent,
@@ -156,6 +158,14 @@ export class EventDetailPage implements OnInit, OnDestroy {
 
   hasMyActivityAssignment(groupId: string) {
     return this.event?.myAssignmentGroupIds.includes(groupId) ?? false;
+  }
+
+  groupConflict(groupId: string) {
+    return this.event?.signupConflicts[groupId] ?? "";
+  }
+
+  slotConflict(slot: EventDetails["slots"][number]) {
+    return slot.groupId ? this.groupConflict(slot.groupId) : "";
   }
 
   toggleGroup(groupId: string) {

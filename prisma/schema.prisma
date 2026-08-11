@@ -108,6 +108,7 @@ model EventGroup {
   predecessor        EventGroup?   @relation("EventGroupDependency", fields: [predecessorGroupId], references: [id], onDelete: SetNull)
   dependents         EventGroup[]  @relation("EventGroupDependency")
   slots              CrewSlot[]
+  assignments        CrewAssignment[]
 
   @@index([eventId, sortOrder])
   @@index([predecessorGroupId])
@@ -134,15 +135,18 @@ model CrewAssignment {
   id             String   @id @default(uuid())
   eventId        String
   crewSlotId     String
+  groupId        String?
   assignmentGroup String
   discordUserId  String
   discordTag     String
   createdAt      DateTime @default(now())
   event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   crewSlot       CrewSlot @relation(fields: [crewSlotId], references: [id], onDelete: Cascade)
+  group          EventGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  @@unique([eventId, discordUserId, assignmentGroup])
+  @@unique([eventId, discordUserId, groupId])
   @@index([crewSlotId])
+  @@index([groupId])
 }
 
 model LootRaffle {
