@@ -5,28 +5,87 @@ import {
   EmbedBuilder,
   type APIEmbedField,
 } from "discord.js";
-import type { CrewAssignment, CrewSlot, Event } from "@prisma/client";
+import type { CrewAssignment, CrewSlot, Event, EventGroup } from "@prisma/client";
 import { eventCopyId, eventJoinId, eventLeaveId } from "../custom-ids.js";
 
 type EventWithSlots = Event & {
+  groups: EventGroup[];
   slots: Array<CrewSlot & { assignments: CrewAssignment[] }>;
 };
 
-const formatUsers = (assignments: CrewAssignment[], capacity: number) => {
-  const names = assignments.map((assignment) => assignment.discordTag);
-  const empty = Array.from({ length: Math.max(capacity - names.length, 0) }, (_, index) => {
-    return `Open ${index + 1}`;
-  });
+const clip = (value: string, limit: number) => value.length <= limit
+  ? value
+  : `${value.slice(0, Math.max(limit - 1, 0))}…`;
 
-  return [...names, ...empty].join("\n");
+const scheduleText = (event: EventWithSlots, group: EventGroup) => {
+  if (group.scheduleMode === "EVENT_START") return "At event start";
+  if (group.scheduleMode === "SPECIFIC_TIME" && group.startsAt) {
+    return `<t:${Math.floor(group.startsAt.getTime() / 1000)}:F>`;
+  }
+  if (group.scheduleMode === "AFTER_GROUP") {
+    const predecessor = event.groups.find((candidate) => candidate.id === group.predecessorGroupId);
+    return predecessor ? `After ${predecessor.name}` : "After another group";
+  }
+  return group.timingNote || "As directed";
+};
+
+const roleLine = (slot: EventWithSlots["slots"][number], showOpen: boolean) => {
+  const assigned = slot.assignments.map((assignment) => assignment.discordTag);
+  const openCount = Math.max(slot.capacity - assigned.length, 0);
+  const people = [
+    ...assigned,
+    ...(showOpen && openCount ? [`Open ×${openCount}`] : []),
+  ];
+  return `**${slot.label}** (${slot.assignments.length}/${slot.capacity}): ${people.join(", ") || "No one assigned"}`;
+};
+
+const structuredFields = (event: EventWithSlots, showOpen: boolean): APIEmbedField[] => {
+  const fields: APIEmbedField[] = [];
+  for (const group of event.groups) {
+    const slots = event.slots.filter((slot) => slot.groupId === group.id);
+    if (group.kind === "FLEET") {
+      const ships = [...new Set(slots.map((slot) => slot.category))];
+      for (const ship of ships) {
+        const shipSlots = slots.filter((slot) => slot.category === ship);
+        const value = [
+          `*${scheduleText(event, group)}*`,
+          group.timingNote && group.scheduleMode !== "AS_DIRECTED" ? group.timingNote : null,
+          ...shipSlots.map((slot) => roleLine(slot, showOpen)),
+        ].filter(Boolean).join("\n");
+        fields.push({
+          name: clip(`${group.name} › ${ship}`, 256),
+          value: clip(value || "No roles listed.", 1024),
+          inline: false,
+        });
+      }
+    } else {
+      const value = [
+        `*${scheduleText(event, group)}*`,
+        group.timingNote && group.scheduleMode !== "AS_DIRECTED" ? group.timingNote : null,
+        ...slots.map((slot) => roleLine(slot, showOpen)),
+      ].filter(Boolean).join("\n");
+      fields.push({ name: clip(group.name, 256), value: clip(value || "No roles listed.", 1024), inline: false });
+    }
+  }
+
+  const extras = event.slots.filter((slot) => slot.assignmentGroup === "extra");
+  if (extras.length) {
+    fields.push({
+      name: "Extra Crew",
+      value: clip(extras.map((slot) => roleLine(slot, showOpen)).join("\n"), 1024),
+      inline: false,
+    });
+  }
+
+  if (fields.length <= 25) return fields;
+  return [
+    ...fields.slice(0, 24),
+    { name: "Additional assignments", value: `${fields.length - 24} more ship or team sections are available on the website.`, inline: false },
+  ];
 };
 
 export const eventEmbed = (event: EventWithSlots) => {
-  const fields: APIEmbedField[] = event.slots.map((slot) => ({
-    name: `${slot.category} - ${slot.label} (${slot.assignments.length}/${slot.capacity})`,
-    value: formatUsers(slot.assignments, slot.capacity),
-    inline: true,
-  }));
+  const fields = structuredFields(event, true);
 
   const embed = new EmbedBuilder()
     .setTitle(event.name)
@@ -61,9 +120,11 @@ export const eventComponents = (event: EventWithSlots) => {
     const isFull = slot.assignments.length >= slot.capacity;
     const isExtraLocked = slot.assignmentGroup === "extra" && !regularSlotsFull;
 
+    const group = event.groups.find((candidate) => candidate.id === slot.groupId);
+    const context = slot.assignmentGroup === "ship" ? slot.category : group?.name ?? slot.category;
     return new ButtonBuilder()
       .setCustomId(eventJoinId(slot.id))
-      .setLabel(slot.label.slice(0, 80))
+      .setLabel(`${context}: ${slot.label}`.slice(0, 80))
       .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Primary)
       .setDisabled(event.status !== "OPEN" || isFull || isExtraLocked);
   });
@@ -101,13 +162,7 @@ export const eventReportEmbed = (event: EventWithSlots) => {
     )
     .setColor(0x3b82f6)
     .addFields(
-      event.slots.map((slot) => ({
-        name: `${slot.category} - ${slot.label}`,
-        value:
-          slot.assignments.map((assignment) => assignment.discordTag).join("\n") ||
-          "No one assigned.",
-        inline: true,
-      })),
+      structuredFields(event, false),
     )
     .setTimestamp();
 };

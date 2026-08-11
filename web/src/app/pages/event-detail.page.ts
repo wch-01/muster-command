@@ -13,7 +13,7 @@ import {
   IonSpinner,
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
-import { ApiService, type EventDetails, type LootItem } from "../services/api.service";
+import { ApiService, type EventDetails, type EventGroupSummary, type LootItem } from "../services/api.service";
 import { browserTimeZoneLabel } from "../utils/event-time";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
@@ -51,6 +51,8 @@ export class EventDetailPage implements OnInit, OnDestroy {
   newItems = "";
   lootOpen = false;
   busyAction = "";
+  expandedGroups = new Set<string>();
+  expandedShips = new Set<string>();
   private stream?: EventSource;
 
   constructor(
@@ -118,6 +120,74 @@ export class EventDetailPage implements OnInit, OnDestroy {
 
   groupedSlots(group: AssignmentGroup) {
     return this.event?.slots.filter((slot) => slot.assignmentGroup === group) ?? [];
+  }
+
+  activityGroups(kind: "FLEET" | "GROUND") {
+    return this.event?.groups.filter((group) => group.kind === kind) ?? [];
+  }
+
+  slotsForGroup(groupId: string) {
+    return this.event?.slots.filter((slot) => slot.groupId === groupId) ?? [];
+  }
+
+  shipsForFleet(groupId: string) {
+    return [...new Set(this.slotsForGroup(groupId).map((slot) => slot.category))];
+  }
+
+  slotsForShip(groupId: string, shipName: string) {
+    return this.slotsForGroup(groupId).filter((slot) => slot.category === shipName);
+  }
+
+  groupCapacity(groupId: string) {
+    return this.slotsForGroup(groupId).reduce((total, slot) => total + slot.capacity, 0);
+  }
+
+  groupAssigned(groupId: string) {
+    return this.slotsForGroup(groupId).reduce((total, slot) => total + slot.assignments.length, 0);
+  }
+
+  shipCapacity(groupId: string, shipName: string) {
+    return this.slotsForShip(groupId, shipName).reduce((total, slot) => total + slot.capacity, 0);
+  }
+
+  shipAssigned(groupId: string, shipName: string) {
+    return this.slotsForShip(groupId, shipName).reduce((total, slot) => total + slot.assignments.length, 0);
+  }
+
+  hasMyActivityAssignment(groupId: string) {
+    return this.event?.myAssignmentGroupIds.includes(groupId) ?? false;
+  }
+
+  toggleGroup(groupId: string) {
+    this.toggleSet(this.expandedGroups, groupId);
+  }
+
+  groupExpanded(groupId: string) {
+    return this.expandedGroups.has(groupId);
+  }
+
+  shipKey(groupId: string, shipName: string) {
+    return `${groupId}:${shipName}`;
+  }
+
+  toggleShip(groupId: string, shipName: string) {
+    this.toggleSet(this.expandedShips, this.shipKey(groupId, shipName));
+  }
+
+  shipExpanded(groupId: string, shipName: string) {
+    return this.expandedShips.has(this.shipKey(groupId, shipName));
+  }
+
+  scheduleDescription(group: EventGroupSummary) {
+    if (group.scheduleMode === "EVENT_START") return "At event start";
+    if (group.scheduleMode === "SPECIFIC_TIME" && group.startsAt) {
+      return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(group.startsAt));
+    }
+    if (group.scheduleMode === "AFTER_GROUP") {
+      const predecessor = this.event?.groups.find((candidate) => candidate.id === group.predecessorGroupId);
+      return predecessor ? `After ${predecessor.name}` : "After another group";
+    }
+    return group.timingNote || "As directed";
   }
 
   groupTitle(group: AssignmentGroup) {
@@ -188,6 +258,10 @@ export class EventDetailPage implements OnInit, OnDestroy {
       return;
     }
     this.runEventAction(`leave-${group}`, this.api.leaveGroup(this.id, group));
+  }
+
+  leaveActivityGroup(group: EventGroupSummary) {
+    this.runEventAction(`leave-group-${group.id}`, this.api.leaveActivityGroup(this.id, group.id));
   }
 
   endEvent() {
@@ -266,5 +340,10 @@ export class EventDetailPage implements OnInit, OnDestroy {
         this.changeDetector.detectChanges();
       },
     });
+  }
+
+  private toggleSet(set: Set<string>, key: string) {
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
   }
 }
