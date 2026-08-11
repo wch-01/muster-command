@@ -158,6 +158,17 @@
   min-width: 240px;
 }
 
+.loot-access-message {
+  color: #92400e;
+  flex-basis: 100%;
+  font-size: 13px;
+  margin: 0;
+}
+
+.loot-access-allowed {
+  color: #12624b;
+}
+
 .loot-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

@@ -2,6 +2,7 @@ import { isDiscordConfigured } from "./config.js";
 import { shutdownBotRuntime, startBot } from "./bot-runtime.js";
 import { loadSettings } from "./settings-store.js";
 import { startSetupServer } from "./setup-server.js";
+import { ensureActivityGroupBackfill } from "./events/group-backfill.js";
 
 // TODO: Move loot into a separate channel for cleaner channel views.
 // TODO: Create a new thread for each event, then delete that thread one week after the event ends.
@@ -20,6 +21,7 @@ process.on("SIGTERM", () => {
 });
 
 const settings = await loadSettings();
+await ensureActivityGroupBackfill();
 await startSetupServer();
 
 if (isDiscordConfigured(settings)) {

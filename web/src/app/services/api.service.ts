@@ -46,6 +46,7 @@ export type EventSummary = {
   startsAt: string | null;
   status: "OPEN" | "CLOSED";
   lootDurationHours: number;
+  groups: EventGroupSummary[];
   slots: Array<{
     id: string;
     category: string;
@@ -65,6 +66,35 @@ export type EventDetails = EventSummary & {
   participantCount: number;
   participantsWithBidCount: number;
   canAddLoot: boolean;
+  lootEligibility: "ALLOWED" | "LOGIN_REQUIRED" | "PROFILE_UNAVAILABLE" | "NOT_PARTICIPANT" | "POOL_DRAWN";
+};
+
+export type ScheduleMode = "EVENT_START" | "SPECIFIC_TIME" | "AFTER_GROUP" | "AS_DIRECTED";
+
+export type EventGroupSummary = {
+  id: string;
+  kind: "FLEET" | "GROUND";
+  name: string;
+  scheduleMode: ScheduleMode;
+  startsAt: string | null;
+  timingNote: string | null;
+  predecessorGroupId: string | null;
+  sortOrder: number;
+};
+
+export type ActivityGroupInput = {
+  clientId: string;
+  kind: "FLEET" | "GROUND";
+  name: string;
+  scheduleMode: ScheduleMode;
+  startsAt?: string;
+  timingNote?: string;
+  predecessorClientId?: string;
+  ships?: Array<{
+    name: string;
+    roles: Array<{ label: string; capacity: number }>;
+  }>;
+  roles?: Array<{ label: string; capacity: number }>;
 };
 
 export type CreatedEventDetails = EventDetails;
@@ -77,10 +107,13 @@ export type CreateEventInput = {
   lootDurationHours: number;
   preset: string;
   customSlots?: string;
+  groups?: ActivityGroupInput[];
+  extraCrewCapacity?: number;
 };
 
 export type TemplateSlot = {
   id: string;
+  groupId: string | null;
   category: string;
   assignmentGroup: "ship" | "ground";
   label: string;
@@ -97,11 +130,22 @@ export type EventTemplateSummary = {
   description: string | null;
   isDefault: boolean;
   slots: TemplateSlot[];
+  groups: Array<{
+    id: string;
+    kind: "FLEET" | "GROUND";
+    name: string;
+    scheduleMode: ScheduleMode;
+    startsAt: string | null;
+    timingNote: string | null;
+    predecessorGroupId: string | null;
+    sortOrder: number;
+  }>;
 };
 
 export type SaveTemplateInput = {
   name: string;
-  slots: Array<{
+  groups?: ActivityGroupInput[];
+  slots?: Array<{
     category: string;
     assignmentGroup: "ship" | "ground";
     label: string;
