@@ -58,7 +58,7 @@ This phase establishes the final event structure before more test events are cre
 15. Preserve existing event history, assignments, loot, and reports during migration.
 16. Keep an API compatibility adapter for Discord slash-command event creation until Discord can submit the structured model directly.
 
-## Phase 3 — Accordion event page (next)
+## Phase 3 — Accordion event page (completed)
 
 This phase uses the new activity-group model created in Phase 2.
 
@@ -74,10 +74,11 @@ This phase uses the new activity-group model created in Phase 2.
 7. Add per-fleet and per-ground-team leave controls.
 8. Keep Extra Crew separate and preserve its locked state until regular roles are filled.
 9. Adapt Discord embeds to retain fleet, ship, ground-team, and sequence information within Discord's layout limits.
+10. Update event-list accordions to summarize named fleets and ground teams with compact filled/open slot totals instead of individual assignments.
 
 Reference mockup: [Event page accordion mockup](event-page-accordion-mockup.png)
 
-## Phase 4 — Multiple assignments and schedule conflicts
+## Phase 4 — Multiple assignments and schedule conflicts (next)
 
 1. Replace the current rule of one fleet assignment and one ground assignment per event.
 2. Enforce one role per participant within each individual fleet or ground team.

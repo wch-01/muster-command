@@ -49,6 +49,7 @@ export type EventSummary = {
   groups: EventGroupSummary[];
   slots: Array<{
     id: string;
+    groupId: string | null;
     category: string;
     assignmentGroup: "ship" | "ground" | "extra";
     label: string;
@@ -62,6 +63,7 @@ export type EventDetails = EventSummary & {
   isOwner: boolean;
   members: EventMember[];
   myAssignmentGroups: Array<"ship" | "ground" | "extra">;
+  myAssignmentGroupIds: string[];
   raffles: LootRaffle[];
   participantCount: number;
   participantsWithBidCount: number;
@@ -289,6 +291,10 @@ export class ApiService {
 
   leaveGroup(eventId: string, group: "ship" | "ground") {
     return this.http.post<EventDetails>(`/api/events/${eventId}/leave/${group}`, {});
+  }
+
+  leaveActivityGroup(eventId: string, groupId: string) {
+    return this.http.post<EventDetails>(`/api/events/${eventId}/groups/${groupId}/leave`, {});
   }
 
   toggleLootBid(eventId: string, itemId: string) {

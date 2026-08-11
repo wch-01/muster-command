@@ -19,9 +19,16 @@
           [attr.aria-expanded]="isExpanded(event.id)"
         >
           <span class="accordion-indicator">{{ isExpanded(event.id) ? "-" : "+" }}</span>
-          <span class="event-name">{{ event.name }}</span>
-          <span class="muted">Creator: {{ event.createdByName }}</span>
-          <span class="participant-pill">{{ participantCount(event) }} participants</span>
+          <span class="event-title">
+            <span class="event-name">{{ event.name }}</span>
+            <small>Created by {{ event.createdByName }}</small>
+          </span>
+          <span class="group-counts">
+            {{ activityGroups(event, "FLEET").length }} fleet{{ activityGroups(event, "FLEET").length === 1 ? "" : "s" }} ·
+            {{ activityGroups(event, "GROUND").length }} ground team{{ activityGroups(event, "GROUND").length === 1 ? "" : "s" }}
+          </span>
+          <span class="slot-totals fleet-total">Fleet: {{ filledSlots(event, "FLEET") }} filled · {{ openRoleSlots(event, "FLEET") }} open</span>
+          <span class="slot-totals ground-total">Ground: {{ filledSlots(event, "GROUND") }} filled · {{ openRoleSlots(event, "GROUND") }} open</span>
         </button>
         <div class="accordion-actions">
           <button class="mini-button primary" type="button" (click)="openEvent(event.id)">View</button>
@@ -39,15 +46,34 @@
 
         <div class="event-id-row">
           <span><strong>Event ID:</strong> <code>{{ event.id }}</code></span>
-          <button class="mini-button" type="button" (click)="copyId(event.id)">Copy ID</button>
+          <span class="copy-control">
+            <button class="mini-button" type="button" (click)="copyId(event.id)" [disabled]="copiedEventId === event.id">Copy ID</button>
+            <span class="copied-toast" *ngIf="copiedEventId === event.id" role="status">Copied!</span>
+          </span>
         </div>
 
-        <div class="slot-grid">
-          <div class="slot-preview" *ngFor="let slot of event.slots">
-            <strong>{{ slot.category }} - {{ slot.label }} ({{ slot.assignments.length }}/{{ slot.capacity }})</strong>
-            <p class="muted" *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</p>
-            <p class="muted" *ngFor="let open of openSlots(slot)">Open {{ open }}</p>
-          </div>
+        <div class="group-overview">
+          <section class="group-overview-section" *ngIf="activityGroups(event, 'FLEET').length">
+            <h3>Fleets</h3>
+            <div class="group-summary-row" *ngFor="let group of activityGroups(event, 'FLEET')">
+              <strong>{{ group.name }}</strong>
+              <span>{{ fleetShipCount(event, group.id) }} ship{{ fleetShipCount(event, group.id) === 1 ? "" : "s" }}</span>
+              <span>{{ groupFilledSlots(event, group.id) }} filled · {{ groupOpenSlots(event, group.id) }} open</span>
+            </div>
+          </section>
+
+          <section class="group-overview-section" *ngIf="activityGroups(event, 'GROUND').length">
+            <h3>Ground Teams</h3>
+            <div class="group-summary-row" *ngFor="let group of activityGroups(event, 'GROUND')">
+              <strong>{{ group.name }}</strong>
+              <span>{{ groupFilledSlots(event, group.id) }} filled · {{ groupOpenSlots(event, group.id) }} open</span>
+            </div>
+          </section>
+
+          <section class="group-overview-section" *ngIf="extraSlots(event).length">
+            <h3>Extra Crew</h3>
+            <div class="group-summary-row"><strong>Extra Crew</strong><span>{{ extraFilledSlots(event) }} filled · {{ extraOpenSlots(event) }} open</span></div>
+          </section>
         </div>
       </section>
     </article>

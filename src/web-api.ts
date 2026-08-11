@@ -200,6 +200,11 @@ const eventDetails = async (
   const myAssignmentGroups = context.userId
     ? [...new Set(members.filter((member) => member.id === context.userId).map((member) => member.group))]
     : [];
+  const myAssignmentGroupIds = context.userId
+    ? [...new Set(event.slots
+      .filter((slot) => slot.groupId && slot.assignments.some((assignment) => assignment.discordUserId === context.userId))
+      .map((slot) => slot.groupId!))]
+    : [];
   const participantsWithBid = new Set(members.filter((member) => member.hasBid).map((member) => member.id));
   const eligibility = lootEligibility({
     isLoggedIn: Boolean(context.userId),
@@ -226,6 +231,7 @@ const eventDetails = async (
     isOwner,
     members,
     myAssignmentGroups,
+    myAssignmentGroupIds,
     participantCount: participantIds.size,
     participantsWithBidCount: participantsWithBid.size,
     canAddLoot: eligibility === "ALLOWED",
@@ -599,10 +605,13 @@ export const handleApiRequest = async (
           startsAt: event.startsAt,
           status: event.status,
           lootDurationHours: event.lootDurationHours,
+          groups: event.groups,
           slots: event.slots,
           raffles: [],
           members: [],
           isOwner: true,
+          myAssignmentGroups: [],
+          myAssignmentGroupIds: [],
         },
       );
       return true;
@@ -769,6 +778,40 @@ export const handleApiRequest = async (
         200,
         await eventDetails(leaveGroupMatch[1], eventContext),
       );
+      return true;
+    }
+
+    const leaveActivityGroupMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/groups\/([^/]+)\/leave$/);
+    if (request.method === "POST" && leaveActivityGroupMatch) {
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      const group = await prisma.eventGroup.findUnique({
+        where: { id: leaveActivityGroupMatch[2] },
+        include: { event: true },
+      });
+      if (!group || group.eventId !== leaveActivityGroupMatch[1]) {
+        json(response, 404, { error: "Activity group not found." });
+        return true;
+      }
+      if (activeGuildId && group.event.guildId !== activeGuildId) {
+        json(response, 403, { error: "That event is not in your active server." });
+        return true;
+      }
+
+      await prisma.crewAssignment.deleteMany({
+        where: {
+          eventId: group.eventId,
+          discordUserId: user.id,
+          crewSlot: { groupId: group.id },
+        },
+      });
+
+      await publishEventPanel(group.eventId);
+      jsonAndNotifyEventsChanged(response, 200, await eventDetails(group.eventId, eventContext));
       return true;
     }
 
