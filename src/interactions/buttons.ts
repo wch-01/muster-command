@@ -2,6 +2,7 @@ import type { ButtonInteraction } from "discord.js";
 import { prisma } from "../db.js";
 import { parseCustomId } from "../custom-ids.js";
 import { getEvent } from "../events/event-service.js";
+import { assignUserToSlot } from "../events/assignment-service.js";
 import { eventComponents, eventEmbed } from "../events/event-views.js";
 import { getRaffle } from "../loot/loot-service.js";
 import { lootComponents, lootEmbed } from "../loot/loot-views.js";
@@ -13,74 +14,8 @@ const displayName = (interaction: ButtonInteraction) => {
 };
 
 const handleEventJoin = async (interaction: ButtonInteraction, slotId: string) => {
-  const slot = await prisma.crewSlot.findUnique({
-    where: { id: slotId },
-    include: { event: true },
-  });
-
-  if (!slot || slot.event.status !== "OPEN") {
-    await interaction.reply({ content: "That signup slot is no longer open.", ephemeral: true });
-    return;
-  }
-
-  if (slot.assignmentGroup === "extra") {
-    const regularSlots = await prisma.crewSlot.findMany({
-      where: {
-        eventId: slot.eventId,
-        assignmentGroup: { not: "extra" },
-      },
-      include: { assignments: true },
-    });
-    const regularSlotsFull =
-      regularSlots.length > 0 &&
-      regularSlots.every((regularSlot) => regularSlot.assignments.length >= regularSlot.capacity);
-
-    if (!regularSlotsFull) {
-      await interaction.reply({ content: "Extra crew opens after the listed roles are full.", ephemeral: true });
-      return;
-    }
-  }
-
-  await prisma.$transaction(async (tx) => {
-    if (slot.assignmentGroup !== "extra") {
-      const extraAssignment = await tx.crewAssignment.findFirst({
-        where: {
-          eventId: slot.eventId,
-          discordUserId: interaction.user.id,
-          assignmentGroup: "extra",
-        },
-      });
-
-      if (extraAssignment) {
-        throw new Error("Extra crew members can only stay in the extra crew area.");
-      }
-    }
-
-    await tx.crewAssignment.deleteMany({
-      where: {
-        eventId: slot.eventId,
-        discordUserId: interaction.user.id,
-        assignmentGroup: slot.assignmentGroup === "extra" ? undefined : slot.assignmentGroup,
-      },
-    });
-
-    const taken = await tx.crewAssignment.count({ where: { crewSlotId: slot.id } });
-    if (taken >= slot.capacity) {
-      throw new Error("That slot filled up just before you clicked it.");
-    }
-
-    await tx.crewAssignment.create({
-      data: {
-        eventId: slot.eventId,
-        crewSlotId: slot.id,
-        assignmentGroup: slot.assignmentGroup,
-        discordUserId: interaction.user.id,
-        discordTag: displayName(interaction),
-      },
-    });
-  });
-
-  const event = await getEvent(slot.eventId);
+  const assigned = await assignUserToSlot({ slotId, discordUserId: interaction.user.id, discordTag: displayName(interaction) });
+  const event = await getEvent(assigned.eventId);
   if (!event) {
     await interaction.reply({ content: "The event could not be found.", ephemeral: true });
     return;

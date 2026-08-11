@@ -1,6 +1,7 @@
 <app-menu [active]="menuActive" />
 
 <ion-content>
+  <div class="site-page-frame">
   <main class="page-shell event-detail" *ngIf="event; else loading">
     <section class="event-controls">
       <div>
@@ -51,6 +52,7 @@
             <span class="accordion-summary">
               <span>{{ groupAssigned(group.id) }}/{{ groupCapacity(group.id) }} assigned</span>
               <ion-badge *ngIf="hasMyActivityAssignment(group.id)" color="primary">Your fleet</ion-badge>
+              <ion-badge *ngIf="groupConflict(group.id) && !hasMyActivityAssignment(group.id)" color="danger">Conflict</ion-badge>
             </span>
           </button>
 
@@ -61,6 +63,7 @@
               </ion-button>
             </div>
             <p class="timing-note" *ngIf="group.timingNote && group.scheduleMode !== 'AS_DIRECTED'">{{ group.timingNote }}</p>
+            <p class="conflict-note" *ngIf="groupConflict(group.id)">{{ groupConflict(group.id) }}</p>
 
             <section class="ship-accordion" *ngFor="let ship of shipsForFleet(group.id)">
               <button class="ship-toggle" type="button" (click)="toggleShip(group.id, ship)" [attr.aria-expanded]="shipExpanded(group.id, ship)">
@@ -72,7 +75,7 @@
                 <div class="slot-row" *ngFor="let slot of slotsForShip(group.id, ship)">
                   <div class="slot-copy"><strong>{{ slot.label }}</strong><small>{{ slot.assignments.length }}/{{ slot.capacity }}</small></div>
                   <div class="slot-members"><span *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</span><span class="muted" *ngIf="!slot.assignments.length">Open</span></div>
-                  <ion-button size="small" (click)="joinSlot(slot)" [disabled]="event.status !== 'OPEN' || slotFilled(slot) || busyAction === 'join-' + slot.id">{{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}</ion-button>
+                  <ion-button size="small" (click)="joinSlot(slot)" [disabled]="event.status !== 'OPEN' || slotFilled(slot) || !!slotConflict(slot) || busyAction === 'join-' + slot.id">{{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}</ion-button>
                 </div>
               </div>
             </section>
@@ -91,18 +94,19 @@
           <button class="accordion-toggle" type="button" (click)="toggleGroup(group.id)" [attr.aria-expanded]="groupExpanded(group.id)">
             <span class="accordion-chevron" aria-hidden="true">{{ groupExpanded(group.id) ? "−" : "+" }}</span>
             <span class="accordion-title"><strong>{{ group.name }}</strong><small>{{ scheduleDescription(group) }}</small></span>
-            <span class="accordion-summary"><span>{{ groupAssigned(group.id) }}/{{ groupCapacity(group.id) }} assigned</span><ion-badge *ngIf="hasMyActivityAssignment(group.id)" color="primary">Your team</ion-badge></span>
+            <span class="accordion-summary"><span>{{ groupAssigned(group.id) }}/{{ groupCapacity(group.id) }} assigned</span><ion-badge *ngIf="hasMyActivityAssignment(group.id)" color="primary">Your team</ion-badge><ion-badge *ngIf="groupConflict(group.id) && !hasMyActivityAssignment(group.id)" color="danger">Conflict</ion-badge></span>
           </button>
           <div class="accordion-content" *ngIf="groupExpanded(group.id)">
             <div class="activity-actions" *ngIf="hasMyActivityAssignment(group.id)">
               <ion-button size="small" fill="outline" color="medium" (click)="leaveActivityGroup(group)" [disabled]="busyAction === 'leave-group-' + group.id">{{ busyAction === "leave-group-" + group.id ? "Leaving..." : "Leave This Ground Team" }}</ion-button>
             </div>
             <p class="timing-note" *ngIf="group.timingNote && group.scheduleMode !== 'AS_DIRECTED'">{{ group.timingNote }}</p>
+            <p class="conflict-note" *ngIf="groupConflict(group.id)">{{ groupConflict(group.id) }}</p>
             <div class="slot-list" *ngIf="slotsForGroup(group.id).length; else noSlots">
               <div class="slot-row" *ngFor="let slot of slotsForGroup(group.id)">
                 <div class="slot-copy"><strong>{{ slot.label }}</strong><small>{{ slot.assignments.length }}/{{ slot.capacity }}</small></div>
                 <div class="slot-members"><span *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</span><span class="muted" *ngIf="!slot.assignments.length">Open</span></div>
-                <ion-button size="small" (click)="joinSlot(slot)" [disabled]="event.status !== 'OPEN' || slotFilled(slot) || busyAction === 'join-' + slot.id">{{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}</ion-button>
+                <ion-button size="small" (click)="joinSlot(slot)" [disabled]="event.status !== 'OPEN' || slotFilled(slot) || !!slotConflict(slot) || busyAction === 'join-' + slot.id">{{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}</ion-button>
               </div>
             </div>
           </div>
@@ -136,6 +140,9 @@
   <ng-template #noSlots>
     <p class="muted">No roles in this group.</p>
   </ng-template>
+
+  <app-site-footer />
+  </div>
 </ion-content>
 
 <div class="modal-backdrop" *ngIf="lootOpen && event" (click)="lootOpen = false">

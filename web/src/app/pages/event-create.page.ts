@@ -10,6 +10,7 @@ import {
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { EventTabsComponent } from "../components/event-tabs.component";
+import { SiteFooterComponent } from "../components/site-footer.component";
 import {
   ApiService,
   type ActivityGroupInput,
@@ -67,6 +68,7 @@ type GroundTeamGroup = ScheduleFields & {
     FormsModule,
     AppMenuComponent,
     EventTabsComponent,
+    SiteFooterComponent,
     IonButton,
     IonCard,
     IonCardContent,

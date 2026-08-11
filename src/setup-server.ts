@@ -294,6 +294,16 @@ const renderTopMenu = (
   </header>`;
 };
 
+const renderSiteFooter = () => `<footer class="site-footer">
+    <div class="site-footer-content">
+      <span><strong>Muster Command</strong> · Website by [Website Builder]</span>
+      <div class="site-footer-contact">
+        <span>Contact: [Email Address]</span>
+        <span>Support: [Support Link]</span>
+      </div>
+    </div>
+  </footer>`;
+
 const renderPageStyles = () => `<style>
       :root {
         color-scheme: light;
@@ -302,6 +312,8 @@ const renderPageStyles = () => `<style>
         color: #17202a;
       }
       body {
+        display: flex;
+        flex-direction: column;
         margin: 0;
         min-height: 100vh;
         background: #f4f6f8;
@@ -384,8 +396,35 @@ const renderPageStyles = () => `<style>
       }
       .page-wrap {
         display: grid;
+        flex: 1 0 auto;
         place-items: start center;
         padding: 32px 16px 48px;
+      }
+      .site-footer {
+        align-items: center;
+        background: #ffffff;
+        border-top: 1px solid #d7dde4;
+        box-sizing: border-box;
+        color: #64748b;
+        display: flex;
+        flex: 0 0 52px;
+        min-height: 52px;
+        padding: 0 18px;
+      }
+      .site-footer-content {
+        align-items: center;
+        display: flex;
+        gap: 24px;
+        justify-content: space-between;
+        margin: 0 auto;
+        width: min(1180px, 100%);
+      }
+      .site-footer-contact {
+        display: flex;
+        gap: 18px;
+      }
+      .site-footer strong {
+        color: #334155;
       }
       main {
         width: min(720px, 100%);
@@ -687,6 +726,13 @@ const renderPageStyles = () => `<style>
           width: 100%;
           justify-content: space-between;
         }
+        .site-footer-content {
+          font-size: 12px;
+          gap: 10px;
+        }
+        .site-footer-contact {
+          gap: 10px;
+        }
       }
     </style>`;
 
@@ -802,6 +848,7 @@ const renderSystemAdminPage = (
       </section>
     </main>
     </div>
+    ${renderSiteFooter()}
     <script>
       const installedServersModal = document.getElementById("installedServersModal");
       const openInstalledServersModal = () => {
@@ -984,6 +1031,7 @@ const renderAdminPage = async (
         </section>
       </main>
     </div>
+    ${renderSiteFooter()}
     <script>
       const updateOutputFields = () => {
         const mode = document.getElementById("eventOutputMode")?.value;

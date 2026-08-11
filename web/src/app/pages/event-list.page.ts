@@ -5,13 +5,14 @@ import { IonContent } from "@ionic/angular/standalone";
 import { Subscription } from "rxjs";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { EventTabsComponent } from "../components/event-tabs.component";
+import { SiteFooterComponent } from "../components/site-footer.component";
 import { type EventSummary } from "../services/api.service";
 import { browserTimeZoneLabel } from "../utils/event-time";
 
 @Component({
   selector: "app-event-list-page",
   standalone: true,
-  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent],
+  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent, SiteFooterComponent],
   templateUrl: "./event-list.page.html",
   styleUrls: ["./event-list.page.scss"],
 })

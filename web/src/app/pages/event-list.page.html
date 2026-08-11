@@ -1,6 +1,7 @@
 <app-menu [active]="mode === 'active' ? 'active-events' : 'past-events'" />
 
 <ion-content>
+  <div class="site-page-frame">
   <main class="page-shell event-list-page">
     <app-event-tabs [active]="mode === 'active' ? 'active-events' : 'past-events'" />
 
@@ -82,4 +83,6 @@
       {{ mode === "active" ? "No active events for this server." : "No past events you participated in." }}
     </p>
   </main>
+  <app-site-footer />
+  </div>
 </ion-content>
