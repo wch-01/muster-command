@@ -23,14 +23,6 @@ const oauthStateMaxAgeSeconds = 60 * 10;
 const sessions = new Map<string, Session>();
 const oauthStates = new Map<string, { returnTo: string; expiresAt: number }>();
 
-const escapeHtml = (value: string | undefined) => {
-  return (value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-};
-
 const parseCookieHeader = (header: string | undefined) => {
   const cookies = new Map<string, string>();
   for (const part of (header ?? "").split(";")) {
@@ -82,7 +74,7 @@ const pruneExpired = () => {
   }
 };
 
-const safeReturnTo = (value: string | null | undefined) => {
+export const safeReturnTo = (value: string | null | undefined) => {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return "/app";
   }
@@ -344,88 +336,4 @@ export const logout = (response: ServerResponse) => {
     "set-cookie": expiredCookie(sessionCookie),
   });
   response.end();
-};
-
-export const renderLoginPage = (
-  settings: DiscordSettings,
-  user: AuthenticatedUser | undefined,
-  returnTo: string,
-) => {
-  const configured = isLoginConfigured(settings);
-  const destination = safeReturnTo(returnTo);
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Discord Login</title>
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: Arial, sans-serif;
-        background: #f4f6f8;
-        color: #17202a;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        padding: 32px 16px;
-      }
-      main {
-        width: min(460px, 100%);
-        background: #ffffff;
-        border: 1px solid #d7dde4;
-        border-radius: 8px;
-        padding: 28px;
-        box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
-      }
-      h1 {
-        margin: 0 0 12px;
-        font-size: 28px;
-      }
-      p {
-        color: #475569;
-        line-height: 1.5;
-      }
-      .button {
-        display: inline-block;
-        margin-top: 12px;
-        border-radius: 6px;
-        padding: 12px 16px;
-        color: #ffffff;
-        background: #5865f2;
-        font-weight: 700;
-        text-decoration: none;
-      }
-      .secondary {
-        background: #475569;
-      }
-      .notice {
-        padding: 12px;
-        border-radius: 6px;
-        background: #fef3c7;
-        color: #92400e;
-      }
-      code {
-        background: #f1f5f9;
-        border-radius: 4px;
-        padding: 2px 5px;
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Discord Login</h1>
-      ${
-        user
-          ? `<p>You are logged in as ${escapeHtml(user.globalName ?? user.username)}.</p><a class="button" href="${escapeHtml(destination)}">Continue</a> <a class="button secondary" href="/logout">Log out</a>`
-          : configured
-            ? `<p>Use Discord to access Muster Command.</p><a class="button" href="/auth/discord?returnTo=${encodeURIComponent(destination)}">Continue with Discord</a>`
-            : `<p class="notice">Discord login is not configured yet. Add <code>APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code> to the environment file next to <code>compose.yml</code>.</p>`
-      }
-    </main>
-  </body>
-</html>`;
 };
