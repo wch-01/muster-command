@@ -2,13 +2,14 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db.js";
 import { createEvent, endEvent, eventInclude } from "./events/event-service.js";
-import { addLootItems, drawRaffleByEventId, lootInclude } from "./loot/loot-service.js";
+import { addLootItems, drawRaffleByEventId, lootInclude, updateLootItem } from "./loot/loot-service.js";
 import { type SlotPresetName, slotPresets, type SlotSeed } from "./slot-presets.js";
 import type { AuthenticatedUser } from "./auth.js";
 import { notifyEventsChanged } from "./event-stream.js";
 import { botGuildTextChannels, publishEventPanel, publishLootPanel } from "./bot-runtime.js";
 import { parseEventStart } from "./event-input.js";
 import { lootEligibility } from "./loot/loot-eligibility.js";
+import { normalizeLootItem } from "./loot/loot-rules.js";
 import {
   activityGroupsFromSlots,
   normalizeActivityGroups,
@@ -45,14 +46,15 @@ const readJsonBody = async <T>(request: IncomingMessage): Promise<T> => {
 
 const parseItems = (value: unknown) => {
   if (Array.isArray(value)) {
-    return value.map(String).map((item) => item.trim()).filter(Boolean);
+    return value.map((item) => typeof item === "string" ? normalizeLootItem({ name: item }) : normalizeLootItem(item));
   }
 
   if (typeof value === "string") {
     return value
       .split(",")
       .map((item) => item.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((name) => normalizeLootItem({ name }));
   }
 
   return [];
@@ -72,6 +74,24 @@ const templateInclude = {
   groups: { orderBy: { sortOrder: "asc" } },
   slots: { orderBy: { sortOrder: "asc" } },
 } satisfies Prisma.EventTemplateInclude;
+
+type LootSettingsBody = {
+  lootDurationHours?: number;
+  resourceLootPolicy?: string;
+  resourceInstructions?: string;
+  lootInstructions?: string;
+  lootAwardMethod?: string;
+  lootRepeatWinnerMode?: string;
+};
+
+const lootSettingsData = (body: LootSettingsBody) => ({
+  lootDurationHours: body.lootDurationHours === 48 ? 48 : 24,
+  resourceLootPolicy: ["ANY", "REFINED_ONLY", "RAW_ONLY", "NONE", "CUSTOM"].includes(body.resourceLootPolicy ?? "") ? body.resourceLootPolicy! : "ANY",
+  resourceInstructions: body.resourceInstructions?.trim() || null,
+  lootInstructions: body.lootInstructions?.trim() || null,
+  lootAwardMethod: body.lootAwardMethod === "INDIVIDUAL_UNITS" ? "INDIVIDUAL_UNITS" : "FULL_QUANTITY",
+  lootRepeatWinnerMode: body.lootRepeatWinnerMode === "ALLOW_REPEATS" ? "ALLOW_REPEATS" : "DIFFERENT_WINNERS",
+});
 
 const writeTemplateGroups = async (
   tx: Prisma.TransactionClient,
@@ -228,6 +248,7 @@ const eventDetails = async (
         ? item.bids.some((bid) => bid.discordUserId === context.userId)
         : false,
       canDelete: Boolean(context.userId && (isOwner || item.addedById === context.userId)),
+      canEdit: Boolean(context.userId && (isOwner || item.addedById === context.userId)),
       bids: isOwner ? item.bids : [],
     })),
   }));
@@ -351,8 +372,7 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const body: { name?: string; slots?: unknown; groups?: unknown } =
-        await readJsonBody<{ name?: string; slots?: unknown; groups?: unknown }>(request).catch(() => ({}));
+      const body = await readJsonBody<{ name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody>(request).catch(() => ({} as { name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody));
       const name = body.name?.trim();
       const slots = normalizeTemplateSlots(body.slots);
       let groups: ActivityGroupSeed[];
@@ -387,6 +407,7 @@ export const handleApiRequest = async (
           createdById: user.id,
           createdByName: activeGuildProfileName,
           name,
+          ...lootSettingsData(body),
         } });
         await writeTemplateGroups(tx, created.id, groups);
         return tx.eventTemplate.findUniqueOrThrow({ where: { id: created.id }, include: templateInclude });
@@ -411,8 +432,7 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const body: { name?: string; slots?: unknown; groups?: unknown } =
-        await readJsonBody<{ name?: string; slots?: unknown; groups?: unknown }>(request).catch(() => ({}));
+      const body = await readJsonBody<{ name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody>(request).catch(() => ({} as { name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody));
       const name = body.name?.trim();
       const slots = normalizeTemplateSlots(body.slots);
       let groups: ActivityGroupSeed[];
@@ -446,7 +466,7 @@ export const handleApiRequest = async (
         await tx.eventTemplateGroup.deleteMany({ where: { templateId: existing.id } });
         await tx.eventTemplate.update({
           where: { id: existing.id },
-          data: { name },
+          data: { name, ...lootSettingsData(body) },
         });
         await writeTemplateGroups(tx, existing.id, groups);
         return tx.eventTemplate.findUniqueOrThrow({ where: { id: existing.id }, include: templateInclude });
@@ -515,6 +535,11 @@ export const handleApiRequest = async (
         logoUrl?: string;
         startsAt?: string;
         lootDurationHours?: number;
+        resourceLootPolicy?: string;
+        resourceInstructions?: string;
+        lootInstructions?: string;
+        lootAwardMethod?: string;
+        lootRepeatWinnerMode?: string;
         preset?: SlotPresetName | "custom";
         customSlots?: string;
         groups?: unknown;
@@ -526,6 +551,11 @@ export const handleApiRequest = async (
         logoUrl?: string;
         startsAt?: string;
         lootDurationHours?: number;
+        resourceLootPolicy?: string;
+        resourceInstructions?: string;
+        lootInstructions?: string;
+        lootAwardMethod?: string;
+        lootRepeatWinnerMode?: string;
         preset?: SlotPresetName | "custom";
         customSlots?: string;
         groups?: unknown;
@@ -589,6 +619,11 @@ export const handleApiRequest = async (
         logoUrl: body.logoUrl?.trim() || undefined,
         startsAt,
         lootDurationHours: body.lootDurationHours === 48 ? 48 : 24,
+        resourceLootPolicy: lootSettingsData(body).resourceLootPolicy,
+        resourceInstructions: body.resourceInstructions?.trim() || undefined,
+        lootInstructions: body.lootInstructions?.trim() || undefined,
+        lootAwardMethod: lootSettingsData(body).lootAwardMethod,
+        lootRepeatWinnerMode: lootSettingsData(body).lootRepeatWinnerMode,
         preset,
         customSlots: body.customSlots,
         groups,
@@ -613,6 +648,11 @@ export const handleApiRequest = async (
           startsAt: event.startsAt,
           status: event.status,
           lootDurationHours: event.lootDurationHours,
+          resourceLootPolicy: event.resourceLootPolicy,
+          resourceInstructions: event.resourceInstructions,
+          lootInstructions: event.lootInstructions,
+          lootAwardMethod: event.lootAwardMethod,
+          lootRepeatWinnerMode: event.lootRepeatWinnerMode,
           groups: event.groups,
           slots: event.slots,
           raffles: [],
@@ -793,7 +833,10 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const event = await prisma.event.findUnique({ where: { id: drawLootMatch[1] } });
+      const event = await prisma.event.findUnique({
+        where: { id: drawLootMatch[1] },
+        include: { raffles: { orderBy: { createdAt: "asc" }, take: 1 } },
+      });
       if (!event) {
         json(response, 404, { error: "Event not found." });
         return true;
@@ -801,6 +844,11 @@ export const handleApiRequest = async (
 
       if (event.createdById !== user.id) {
         json(response, 403, { error: "Only the event owner can roll this loot pool." });
+        return true;
+      }
+
+      if (event.raffles[0]?.status === "DRAWN") {
+        json(response, 409, { error: "This loot pool has already been drawn." });
         return true;
       }
 
@@ -822,7 +870,7 @@ export const handleApiRequest = async (
 
     const addLootMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/loot\/items$/);
     if (request.method === "POST" && addLootMatch) {
-      const body = await readJsonBody<{ items?: string[] | string }>(request);
+      const body = await readJsonBody<{ items?: unknown }>(request);
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -835,7 +883,13 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const items = parseItems(body.items);
+      let items;
+      try {
+        items = parseItems(body.items);
+      } catch (error) {
+        json(response, 400, { error: error instanceof Error ? error.message : "Invalid loot item." });
+        return true;
+      }
       if (!items.length) {
         json(response, 400, { error: "At least one loot item is required." });
         return true;
@@ -956,6 +1010,44 @@ export const handleApiRequest = async (
     }
 
     const deleteLootMatch = url.pathname.match(/^\/api\/loot\/items\/([^/]+)$/);
+    if (request.method === "PUT" && deleteLootMatch) {
+      const body = await readJsonBody<unknown>(request);
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      const item = await prisma.lootItem.findUnique({
+        where: { id: deleteLootMatch[1] },
+        include: { raffle: { include: { event: true } } },
+      });
+      if (!item) {
+        json(response, 404, { error: "Loot item not found." });
+        return true;
+      }
+      if (item.raffle.status !== "OPEN") {
+        json(response, 409, { error: "Loot items cannot be edited after the pool is drawn." });
+        return true;
+      }
+
+      const isOwner = item.raffle.event.createdById === user.id;
+      if (!isOwner && item.addedById !== user.id) {
+        json(response, 403, { error: "Only the item creator or event owner can edit this loot item." });
+        return true;
+      }
+
+      let normalized;
+      try {
+        normalized = normalizeLootItem(body);
+      } catch (error) {
+        json(response, 400, { error: error instanceof Error ? error.message : "Invalid loot item." });
+        return true;
+      }
+      await updateLootItem(item.id, user.id, normalized);
+      await publishLootPanel(item.eventId);
+      jsonAndNotifyEventsChanged(response, 200, await eventDetails(item.eventId, eventContext));
+      return true;
+    }
     if (request.method === "DELETE" && deleteLootMatch) {
       await readJsonBody<Record<string, never>>(request).catch(() => ({}));
       if (!user) {
@@ -969,6 +1061,11 @@ export const handleApiRequest = async (
       });
       if (!item) {
         json(response, 404, { error: "Loot item not found." });
+        return true;
+      }
+
+      if (item.raffle.status !== "OPEN") {
+        json(response, 409, { error: "Loot items cannot be deleted after the pool is drawn." });
         return true;
       }
 

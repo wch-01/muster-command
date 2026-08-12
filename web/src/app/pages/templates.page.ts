@@ -36,6 +36,12 @@ type TemplateDraft = {
   createdByName?: string;
   fleets: TemplateFleet[];
   groundTeams: TemplateGroundTeam[];
+  lootDurationHours: 24 | 48;
+  resourceLootPolicy: EventTemplateSummary["resourceLootPolicy"];
+  resourceInstructions: string;
+  lootInstructions: string;
+  lootAwardMethod: EventTemplateSummary["lootAwardMethod"];
+  lootRepeatWinnerMode: EventTemplateSummary["lootRepeatWinnerMode"];
 };
 
 @Component({
@@ -281,6 +287,12 @@ export class TemplatesPage implements OnInit, OnDestroy {
 
     return {
       name: this.draft.name.trim(),
+      lootDurationHours: this.draft.lootDurationHours,
+      resourceLootPolicy: this.draft.resourceLootPolicy,
+      resourceInstructions: this.draft.resourceInstructions.trim() || undefined,
+      lootInstructions: this.draft.lootInstructions.trim() || undefined,
+      lootAwardMethod: this.draft.lootAwardMethod,
+      lootRepeatWinnerMode: this.draft.lootRepeatWinnerMode,
       groups,
     };
   }
@@ -291,6 +303,12 @@ export class TemplatesPage implements OnInit, OnDestroy {
       id: template.id,
       name: template.name,
       createdByName: template.createdByName,
+      lootDurationHours: template.lootDurationHours === 48 ? 48 : 24,
+      resourceLootPolicy: template.resourceLootPolicy,
+      resourceInstructions: template.resourceInstructions ?? "",
+      lootInstructions: template.lootInstructions ?? "",
+      lootAwardMethod: template.lootAwardMethod,
+      lootRepeatWinnerMode: template.lootRepeatWinnerMode,
       fleets: this.templateFleets(template, clientIds),
       groundTeams: this.templateGroundTeams(template, clientIds),
     };
@@ -316,6 +334,12 @@ export class TemplatesPage implements OnInit, OnDestroy {
     this.nextGroupNumber = 1;
     return {
       name: "",
+      lootDurationHours: 24,
+      resourceLootPolicy: "ANY",
+      resourceInstructions: "",
+      lootInstructions: "",
+      lootAwardMethod: "FULL_QUANTITY",
+      lootRepeatWinnerMode: "DIFFERENT_WINNERS",
       fleets: [{ ...this.scheduleDefaults("FLEET", 0), ships: [this.defaultShip(1)] }],
       groundTeams: [
         {

@@ -6,7 +6,6 @@ import {
   IonBadge,
   IonButton,
   IonContent,
-  IonInput,
   IonItem,
   IonLabel,
   IonList,
@@ -14,7 +13,7 @@ import {
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
-import { ApiService, type EventDetails, type EventGroupSummary, type LootItem } from "../services/api.service";
+import { ApiService, type EventDetails, type EventGroupSummary, type LootItem, type LootItemInput } from "../services/api.service";
 import { browserTimeZoneLabel } from "../utils/event-time";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
@@ -31,7 +30,6 @@ type AssignmentGroup = "ship" | "ground" | "extra";
     IonBadge,
     IonButton,
     IonContent,
-    IonInput,
     IonItem,
     IonLabel,
     IonList,
@@ -50,7 +48,8 @@ export class EventDetailPage implements OnInit, OnDestroy {
   event?: EventDetails;
   error = "";
   lootError = "";
-  newItems = "";
+  lootDraft: LootItemInput = this.emptyLootDraft();
+  editingLootItemId = "";
   lootOpen = false;
   busyAction = "";
   expandedGroups = new Set<string>();
@@ -87,6 +86,48 @@ export class EventDetailPage implements OnInit, OnDestroy {
 
   get bidProgress() {
     return `${this.event?.participantsWithBidCount ?? 0}/${this.event?.participantCount ?? 0}`;
+  }
+
+  categoryLabel(category: LootItem["category"]) {
+    return ({ RESOURCE: "Resource or material", WEAPON: "Weapon", ARMOR: "Armor", COMPONENT: "Component or equipment", CONSUMABLE: "Consumable", OTHER: "Other" })[category];
+  }
+
+  quantityWarning(item: Pick<LootItemInput, "category" | "quantity">) {
+    const threshold = item.category === "RESOURCE" ? 100 : 10;
+    return Number(item.quantity) > threshold ? `Unusually large quantity (${item.quantity}). Confirm this is correct.` : "";
+  }
+
+  resourceWarning(item: Pick<LootItemInput, "category">) {
+    return item.category === "RESOURCE" && this.event?.resourceLootPolicy === "NONE"
+      ? "This event asks participants not to add resources. You may still save this item."
+      : "";
+  }
+
+  qualityWarning(item: Pick<LootItemInput, "quality">) {
+    if (item.quality === null || item.quality === undefined) return "";
+    const quality = Number(item.quality);
+    return Number.isInteger(quality) && quality >= 1 && quality <= 1000 ? "" : "Quality must be a whole number from 1 through 1000.";
+  }
+
+  lootDraftInvalid() {
+    const quantity = Number(this.lootDraft.quantity);
+    return !this.lootDraft.name.trim() || !Number.isInteger(quantity) || quantity < 1 || Boolean(this.qualityWarning(this.lootDraft));
+  }
+
+  awardSummary(item: LootItem) {
+    const totals = new Map<string, { tag: string; quantity: number }>();
+    for (const award of item.awards) {
+      const current = totals.get(award.discordUserId);
+      totals.set(award.discordUserId, { tag: award.discordTag, quantity: (current?.quantity ?? 0) + award.quantity });
+    }
+    return [...totals.values()].map((award) => `${award.tag}: ${award.quantity}`).join(", ");
+  }
+
+  itemAwardDescription() {
+    const method = this.event?.lootAwardMethod;
+    if (method !== "INDIVIDUAL_UNITS") return "Entire quantity awarded to one winner";
+    const repeats = this.event?.lootRepeatWinnerMode;
+    return repeats === "ALLOW_REPEATS" ? "Units awarded separately; repeat winners allowed" : "Units awarded separately; different winners when possible";
   }
 
   get lootEligibilityMessage() {
@@ -278,12 +319,15 @@ export class EventDetailPage implements OnInit, OnDestroy {
     this.runEventAction("end", this.api.endEvent(this.id));
   }
 
-  addLootItems() {
+  saveLootItem() {
     this.lootError = "";
-    this.api.addLootItems(this.id, this.newItems).subscribe({
+    const request = this.editingLootItemId
+      ? this.api.updateLootItem(this.id, this.editingLootItemId, this.lootDraft)
+      : this.api.addLootItems(this.id, [this.lootDraft]);
+    request.subscribe({
       next: (event) => {
         this.event = event;
-        this.newItems = "";
+        this.cancelLootEdit();
         this.changeDetector.detectChanges();
       },
       error: (error) => {
@@ -350,6 +394,23 @@ export class EventDetailPage implements OnInit, OnDestroy {
         this.changeDetector.detectChanges();
       },
     });
+  }
+
+  editLootItem(item: LootItem) {
+    this.editingLootItemId = item.id;
+    this.lootDraft = {
+      name: item.name, category: item.category, quantity: item.quantity, quality: item.quality,
+      unit: item.unit,
+    };
+  }
+
+  cancelLootEdit() {
+    this.editingLootItemId = "";
+    this.lootDraft = this.emptyLootDraft();
+  }
+
+  private emptyLootDraft(): LootItemInput {
+    return { name: "", category: "OTHER", quantity: 1, quality: null, unit: null };
   }
 
   private toggleSet(set: Set<string>, key: string) {

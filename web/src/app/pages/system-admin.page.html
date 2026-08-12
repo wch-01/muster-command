@@ -1,0 +1,16 @@
+<app-menu active="system-admin" />
+<ion-content [scrollY]="true"><div class="site-page-frame"><main class="page-shell system-page">
+  <header><h1>System Admin</h1><p class="muted">Bot connection and Discord command registration.</p></header>
+  <p class="notice-panel" *ngIf="notice">{{ notice }}</p><p class="error-panel" *ngIf="error">{{ error }}</p>
+  <ng-container *ngIf="data as system">
+    <section class="status-grid">
+      <article><strong>Configuration</strong><span>{{ system.configured ? "Configured" : "Not configured" }}</span></article>
+      <article><strong>Connection</strong><span>{{ system.status.connected ? "Connected as " + system.status.userTag : "Not connected" }}</span></article>
+      <article><strong>Installed Servers</strong><span>{{ system.status.guildCount }}</span></article>
+      <article><strong>Uptime</strong><span>{{ duration(system.status.uptimeSeconds) }}</span></article>
+    </section>
+    <section class="system-panel"><h2>Command Registration</h2><p>Use server registration for immediate testing. Use global registration for production servers.</p><div class="actions"><button class="mini-button" [disabled]="working" (click)="register('guild')">Register to selected server</button><button class="mini-button primary" [disabled]="working" (click)="register('global')">Register globally</button></div></section>
+    <section class="system-panel"><h2>Installed Servers</h2><div class="server-list" *ngIf="system.installedServers.length; else noServers"><div *ngFor="let server of system.installedServers"><strong>{{ server.name }}</strong><code>{{ server.id }}</code></div></div><ng-template #noServers><p class="muted">The bot is not connected to any servers.</p></ng-template></section>
+    <section class="system-panel"><h2>Discord Developer Portal</h2><ul><li>Bot token: Bot → Token</li><li>Application ID: General Information → Application ID</li><li>Client Secret: OAuth2 → General</li><li>Enable Server Members Intent to populate member permission choices.</li></ul></section>
+  </ng-container>
+</main><app-site-footer /></div></ion-content>

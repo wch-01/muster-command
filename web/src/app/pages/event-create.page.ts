@@ -95,6 +95,11 @@ export class EventCreatePage implements OnInit {
     startsAt: "",
     preset: "combat-op",
     lootDurationHours: 24,
+    resourceLootPolicy: "ANY",
+    resourceInstructions: "",
+    lootInstructions: "",
+    lootAwardMethod: "FULL_QUANTITY",
+    lootRepeatWinnerMode: "DIFFERENT_WINNERS",
   };
 
   constructor(
@@ -163,6 +168,11 @@ export class EventCreatePage implements OnInit {
         startsAt: "",
         preset: this.defaultTemplateId() ?? "combat-op",
         lootDurationHours: 24,
+        resourceLootPolicy: "ANY",
+        resourceInstructions: "",
+        lootInstructions: "",
+        lootAwardMethod: "FULL_QUANTITY",
+        lootRepeatWinnerMode: "DIFFERENT_WINNERS",
       };
       this.applyTemplate(this.form.preset);
       await this.router.navigate(["/events", eventId], {
@@ -356,6 +366,12 @@ export class EventCreatePage implements OnInit {
     const template = this.templates.find((item) => item.id === preset);
     if (template) {
       this.applyTemplateSlots(template);
+      this.form.lootDurationHours = template.lootDurationHours;
+      this.form.resourceLootPolicy = template.resourceLootPolicy;
+      this.form.resourceInstructions = template.resourceInstructions ?? "";
+      this.form.lootInstructions = template.lootInstructions ?? "";
+      this.form.lootAwardMethod = template.lootAwardMethod;
+      this.form.lootRepeatWinnerMode = template.lootRepeatWinnerMode;
       return;
     }
 

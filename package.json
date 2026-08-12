@@ -12,7 +12,7 @@
     "commands:deploy": "tsx src/deploy-commands.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push --accept-data-loss",
-    "test": "tsx --test src/event-input.test.ts src/event-groups.test.ts src/events/event-views.test.ts src/events/schedule-conflicts.test.ts src/loot/loot-eligibility.test.ts web/src/app/utils/event-time.test.ts",
+    "test": "tsx --test src/event-input.test.ts src/event-groups.test.ts src/events/event-views.test.ts src/events/schedule-conflicts.test.ts src/loot/loot-eligibility.test.ts src/loot/loot-rules.test.ts web/src/app/utils/event-time.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

@@ -151,7 +151,8 @@
       <div>
         <h2>Loot for {{ event.name }}</h2>
         <p class="muted" *ngIf="raffle?.endsAt">Ends {{ raffle?.endsAt | date: "medium" }} · {{ timeZoneLabel }}</p>
-        <p class="muted" *ngIf="!raffle?.endsAt">Loot timer starts when the event is ended.</p>
+        <p class="muted" *ngIf="raffle?.status === 'OPEN' && !raffle?.endsAt">Loot timer starts when the event is ended.</p>
+        <p class="muted" *ngIf="raffle?.status === 'DRAWN'">This loot pool has been drawn.</p>
       </div>
       <div class="toolbar-actions">
         <ion-badge *ngIf="event.isOwner" color="success">{{ bidProgress }} Participants Bid</ion-badge>
@@ -162,11 +163,26 @@
       </div>
     </header>
 
+    <section class="loot-guidance">
+      <strong>Resource loot rules: {{ event.resourceLootPolicy === 'ANY' ? 'Any form' : event.resourceLootPolicy === 'REFINED_ONLY' ? 'Refined materials only' : event.resourceLootPolicy === 'RAW_ONLY' ? 'Raw resources only' : event.resourceLootPolicy === 'NONE' ? 'No resources' : 'Custom rules' }}</strong>
+      <p *ngIf="event.resourceInstructions">{{ event.resourceInstructions }}</p>
+      <p *ngIf="event.lootInstructions"><strong>Loot instructions:</strong> {{ event.lootInstructions }}</p>
+    </section>
+
     <section class="loot-add">
-      <ion-input label="Add Loot Items" labelPlacement="stacked" [(ngModel)]="newItems" placeholder="Gem, Armor, Weapon" />
-      <ion-button (click)="addLootItems()" [disabled]="!event.canAddLoot || !newItems.trim() || raffle?.status === 'DRAWN'">
-        Add Loot
-      </ion-button>
+      <h3>{{ editingLootItemId ? 'Edit loot item' : 'Add loot item' }}</h3>
+      <div class="loot-form-grid">
+        <label><span>Loot category</span><select [(ngModel)]="lootDraft.category"><option value="RESOURCE">Resource or material</option><option value="WEAPON">Weapon</option><option value="ARMOR">Armor</option><option value="COMPONENT">Component or equipment</option><option value="CONSUMABLE">Consumable</option><option value="OTHER">Other</option></select></label>
+        <label><span>Item or material name</span><input type="text" maxlength="120" [(ngModel)]="lootDraft.name" /></label>
+        <label [class.warning-field]="quantityWarning(lootDraft)"><span>Quantity</span><input type="number" min="1" step="1" [(ngModel)]="lootDraft.quantity" /><small *ngIf="quantityWarning(lootDraft)">{{ quantityWarning(lootDraft) }}</small></label>
+        <label [class.warning-field]="qualityWarning(lootDraft)"><span>Quality <em>optional, 1–1000</em></span><input type="number" min="1" max="1000" step="1" [(ngModel)]="lootDraft.quality" /><small *ngIf="qualityWarning(lootDraft)">{{ qualityWarning(lootDraft) }}</small></label>
+        <label *ngIf="lootDraft.category === 'RESOURCE' || lootDraft.category === 'OTHER'"><span>Unit or package <em>optional</em></span><input type="text" [(ngModel)]="lootDraft.unit" placeholder="boxes, mining bag, gems" /></label>
+      </div>
+      <p class="warning-text" *ngIf="resourceWarning(lootDraft)">{{ resourceWarning(lootDraft) }}</p>
+      <div class="loot-form-actions">
+        <ion-button (click)="saveLootItem()" [disabled]="(!editingLootItemId && !event.canAddLoot) || lootDraftInvalid() || raffle?.status === 'DRAWN'">{{ editingLootItemId ? 'Save Changes' : 'Add Loot' }}</ion-button>
+        <ion-button *ngIf="editingLootItemId" fill="outline" color="medium" (click)="cancelLootEdit()">Cancel</ion-button>
+      </div>
       <p class="loot-access-message" [class.loot-access-allowed]="event.lootEligibility === 'ALLOWED'">{{ lootEligibilityMessage }}</p>
       <p class="error-panel" *ngIf="lootError">{{ lootError }}</p>
     </section>
@@ -176,12 +192,15 @@
         <header>
           <div>
             <h3>{{ item.name }}</h3>
+            <p class="muted">{{ categoryLabel(item.category) }} · Quantity {{ item.quantity }}<span *ngIf="item.quality"> · Quality {{ item.quality }}</span><span *ngIf="item.unit"> · {{ item.unit }}</span></p>
+            <p class="muted">{{ itemAwardDescription() }}</p>
             <p class="muted">Added by {{ item.addedByName }}</p>
           </div>
           <ion-badge>{{ item.bidCount }} bid{{ item.bidCount === 1 ? "" : "s" }}</ion-badge>
         </header>
 
-        <p class="winner" *ngIf="item.winnerTag">Winner: {{ item.winnerTag }}</p>
+        <p class="winner" *ngIf="item.awards.length">Awards: {{ awardSummary(item) }}</p>
+        <p class="muted" *ngIf="raffle?.status === 'DRAWN' && !item.awards.length">No eligible bids.</p>
 
         <ion-list lines="none" *ngIf="event.isOwner && item.bids.length">
           <ion-item class="member-row" *ngFor="let bid of item.bids">
@@ -193,6 +212,7 @@
           <ion-button size="small" (click)="toggleBid(item)" [disabled]="!event.canAddLoot || raffle?.status === 'DRAWN'">
             {{ item.hasMyBid ? "Remove Bid" : "Bid" }}
           </ion-button>
+          <ion-button size="small" fill="outline" (click)="editLootItem(item)" [disabled]="!item.canEdit || raffle?.status === 'DRAWN'">Edit</ion-button>
           <ion-button size="small" color="danger" fill="outline" (click)="removeLootItem(item)" [disabled]="!item.canDelete || raffle?.status === 'DRAWN'">
             Delete
           </ion-button>

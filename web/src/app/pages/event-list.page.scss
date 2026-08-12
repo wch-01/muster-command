@@ -231,6 +231,49 @@ ion-content {
   border-color: #1d6fe8;
 }
 
+:host-context(html[data-theme="dark"]) {
+  .accordion-summary,
+  .event-id-row,
+  .group-summary-row {
+    background: #1f2937;
+    color: #e5e7eb;
+  }
+
+  .accordion-summary:hover {
+    background: #273449;
+  }
+
+  .event-name,
+  .group-summary-row strong {
+    color: #f3f4f6;
+  }
+
+  .event-title small,
+  .group-counts,
+  .group-summary-row span {
+    color: #9ca3af;
+  }
+
+  .accordion-body,
+  .group-summary-row {
+    border-color: #4b5563;
+  }
+
+  .group-overview-section h3 {
+    color: #9ca3af;
+  }
+
+  .event-id-row code {
+    color: #d1d5db;
+  }
+
+  .copy-control .mini-button:disabled {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+  }
+}
+
 @keyframes return-highlight {
   0%, 45% {
     box-shadow: 0 0 0 4px rgba(29, 111, 232, 0.22);
