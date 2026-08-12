@@ -22,9 +22,9 @@ import {
   isAdminUser,
   isLoginConfigured,
   logout,
-  renderLoginPage,
   requireAuthenticatedApiUser,
   requireAuthenticatedUser,
+  safeReturnTo,
   setActiveGuild,
   type AuthenticatedUser,
 } from "./auth.js";
@@ -71,6 +71,8 @@ const serveWebApp = async (
   url: URL,
   response: import("node:http").ServerResponse,
   sessionData?: unknown,
+  loginData?: unknown,
+  fallbackToIndex = true,
 ) => {
   if (url.pathname !== "/app" && !url.pathname.startsWith("/app/")) {
     return false;
@@ -86,15 +88,21 @@ const serveWebApp = async (
       filePath = join(filePath, "index.html");
     }
   } catch {
+    if (!fallbackToIndex) {
+      return false;
+    }
     filePath = join(webAppRoot, "index.html");
   }
 
   const contentType = mimeTypes[extname(filePath)] ?? "application/octet-stream";
   let content = await readFile(filePath);
-  if (contentType.startsWith("text/html") && sessionData) {
+  if (contentType.startsWith("text/html") && (sessionData || loginData)) {
     const html = content.toString("utf8");
-    const script = `<script>window.__STARBOT_SESSION__=${JSON.stringify(sessionData).replaceAll("</script", "<\\/script")};</script>`;
-    content = Buffer.from(html.replace("</head>", `${script}</head>`), "utf8");
+    const script = [
+      sessionData ? `window.__STARBOT_SESSION__=${JSON.stringify(sessionData)};` : "",
+      loginData ? `window.__MUSTER_LOGIN__=${JSON.stringify(loginData)};` : "",
+    ].join("").replaceAll("</script", "<\\/script");
+    content = Buffer.from(html.replace("</head>", `<script>${script}</script></head>`), "utf8");
   }
 
   response.writeHead(200, { "content-type": contentType });
@@ -1362,14 +1370,9 @@ export const startSetupServer = async () => {
       const settings = await loadSettings();
 
       if (request.method === "GET" && url.pathname === "/login") {
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          renderLoginPage(
-            settings,
-            getSessionUser(request),
-            url.searchParams.get("returnTo") ?? "/app/dashboard",
-          ),
-        );
+        const destination = safeReturnTo(url.searchParams.get("returnTo") ?? "/app/dashboard");
+        response.writeHead(302, { location: `/app/login?returnTo=${encodeURIComponent(destination)}` });
+        response.end();
         return;
       }
 
@@ -1553,6 +1556,27 @@ export const startSetupServer = async () => {
         request.method === "GET" &&
         (url.pathname === "/app" || url.pathname.startsWith("/app/"))
       ) {
+        const loginRoute = url.pathname === "/app/login";
+        const staticAsset =
+          url.pathname.startsWith("/app/assets/") ||
+          /^\/app\/(?:chunk|main|polyfills|styles)-[A-Z0-9]+\.(?:js|css)$/.test(url.pathname);
+        if (loginRoute || staticAsset) {
+          const user = getSessionUser(request);
+          const destination = safeReturnTo(url.searchParams.get("returnTo") ?? "/app/dashboard");
+          if (await serveWebApp(url, response, undefined, loginRoute ? {
+            configured: isLoginConfigured(settings),
+            destination,
+            user: user ? { username: user.username, globalName: user.globalName } : undefined,
+          } : undefined, loginRoute)) {
+            return;
+          }
+          if (staticAsset) {
+            response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+            response.end("Not found");
+            return;
+          }
+        }
+
         const user = requireAuthenticatedUser(request, response, request.url ?? "/app");
         if (!user) {
           return;

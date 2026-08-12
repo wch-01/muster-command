@@ -7,6 +7,7 @@ import { TemplatesPage } from "./pages/templates.page";
 import { AdminPage } from "./pages/admin.page";
 import { BotCommandsPage } from "./pages/bot-commands.page";
 import { SystemAdminPage } from "./pages/system-admin.page";
+import { LoginPage } from "./pages/login.page";
 
 export const routes: Routes = [
   { path: "", redirectTo: "dashboard", pathMatch: "full" },
@@ -19,4 +20,5 @@ export const routes: Routes = [
   { path: "bot-commands", component: BotCommandsPage },
   { path: "admin", component: AdminPage },
   { path: "system-admin", component: SystemAdminPage },
+  { path: "login", component: LoginPage },
 ];
