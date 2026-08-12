@@ -5,24 +5,29 @@ import { IonContent } from "@ionic/angular/standalone";
 import { Subscription } from "rxjs";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { EventTabsComponent } from "../components/event-tabs.component";
+import { SiteFooterComponent } from "../components/site-footer.component";
 import { type EventSummary } from "../services/api.service";
+import { browserTimeZoneLabel } from "../utils/event-time";
 
 @Component({
   selector: "app-event-list-page",
   standalone: true,
-  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent],
+  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent, SiteFooterComponent],
   templateUrl: "./event-list.page.html",
   styleUrls: ["./event-list.page.scss"],
 })
 export class EventListPage implements OnInit, OnDestroy {
+  readonly timeZoneLabel = browserTimeZoneLabel();
   @ViewChild(IonContent) private content?: IonContent;
   mode: "active" | "past" = "active";
   events: EventSummary[] = [];
   expandedEventIds = new Set<string>();
   highlightedEventId = "";
+  copiedEventId = "";
   error = "";
   private routeSubscription?: Subscription;
   private stream?: EventSource;
+  private copiedTimeoutId?: number;
   private restoreListPosition = true;
 
   constructor(
@@ -43,6 +48,7 @@ export class EventListPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.routeSubscription?.unsubscribe();
     this.stream?.close();
+    if (this.copiedTimeoutId) window.clearTimeout(this.copiedTimeoutId);
   }
 
   async loadEvents() {
@@ -95,26 +101,67 @@ export class EventListPage implements OnInit, OnDestroy {
     return this.expandedEventIds.has(eventId);
   }
 
-  participantCount(event: EventSummary) {
-    const userIds = new Set<string>();
-    for (const slot of event.slots) {
-      for (const assignment of slot.assignments) {
-        userIds.add(assignment.discordUserId);
-      }
+  activityGroups(event: EventSummary, kind: "FLEET" | "GROUND") {
+    return event.groups.filter((group) => group.kind === kind);
+  }
+
+  slotsForGroup(event: EventSummary, groupId: string) {
+    return event.slots.filter((slot) => slot.groupId === groupId);
+  }
+
+  filledSlots(event: EventSummary, kind: "FLEET" | "GROUND") {
+    const groupIds = new Set(this.activityGroups(event, kind).map((group) => group.id));
+    return event.slots
+      .filter((slot) => slot.groupId && groupIds.has(slot.groupId))
+      .reduce((total, slot) => total + slot.assignments.length, 0);
+  }
+
+  openRoleSlots(event: EventSummary, kind: "FLEET" | "GROUND") {
+    const groupIds = new Set(this.activityGroups(event, kind).map((group) => group.id));
+    return event.slots
+      .filter((slot) => slot.groupId && groupIds.has(slot.groupId))
+      .reduce((total, slot) => total + Math.max(slot.capacity - slot.assignments.length, 0), 0);
+  }
+
+  groupFilledSlots(event: EventSummary, groupId: string) {
+    return this.slotsForGroup(event, groupId).reduce((total, slot) => total + slot.assignments.length, 0);
+  }
+
+  groupOpenSlots(event: EventSummary, groupId: string) {
+    return this.slotsForGroup(event, groupId)
+      .reduce((total, slot) => total + Math.max(slot.capacity - slot.assignments.length, 0), 0);
+  }
+
+  fleetShipCount(event: EventSummary, groupId: string) {
+    return new Set(this.slotsForGroup(event, groupId).map((slot) => slot.category)).size;
+  }
+
+  extraSlots(event: EventSummary) {
+    return event.slots.filter((slot) => slot.assignmentGroup === "extra");
+  }
+
+  extraFilledSlots(event: EventSummary) {
+    return this.extraSlots(event).reduce((total, slot) => total + slot.assignments.length, 0);
+  }
+
+  extraOpenSlots(event: EventSummary) {
+    return this.extraSlots(event).reduce((total, slot) => total + Math.max(slot.capacity - slot.assignments.length, 0), 0);
+  }
+
+  async copyId(id: string) {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(id);
+      this.copiedEventId = id;
+      if (this.copiedTimeoutId) window.clearTimeout(this.copiedTimeoutId);
+      this.copiedTimeoutId = window.setTimeout(() => {
+        this.copiedEventId = "";
+        this.refreshView();
+      }, 1500);
+      this.refreshView();
+    } catch {
+      // Leave the button active when the browser denies clipboard access.
     }
-
-    return userIds.size;
-  }
-
-  openSlots(slot: EventSummary["slots"][number]) {
-    return Array.from(
-      { length: Math.max(slot.capacity - slot.assignments.length, 0) },
-      (_, index) => index + 1,
-    );
-  }
-
-  copyId(id: string) {
-    void navigator.clipboard?.writeText(id);
   }
 
   async openEvent(eventId: string, openLoot = false) {

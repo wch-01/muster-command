@@ -1,6 +1,7 @@
 <app-menu [active]="menuActive" />
 
 <ion-content>
+  <div class="site-page-frame">
   <main class="page-shell event-detail" *ngIf="event; else loading">
     <section class="event-controls">
       <div>
@@ -8,7 +9,7 @@
           &larr; {{ backLabel }}
         </ion-button>
         <h1>{{ event.name }}</h1>
-        <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}</p>
+        <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}<span *ngIf="event.startsAt"> · {{ timeZoneLabel }}</span></p>
       </div>
       <div class="toolbar-actions">
         <ion-button color="secondary" (click)="lootOpen = true">Loot</ion-button>
@@ -35,49 +36,93 @@
     </section>
 
     <section class="signup-layout">
-      <article class="event-panel" *ngFor="let group of groups">
-        <header>
-          <div>
-            <h2>{{ groupTitle(group) }}</h2>
-            <p class="muted" *ngIf="group === 'ship'">One fleet role per person.</p>
-            <p class="muted" *ngIf="group === 'ground'">One ground role per person.</p>
-            <p class="muted" *ngIf="group === 'extra'">
-              Extra crew opens when all listed fleet and ground roles are full.
-            </p>
-          </div>
-          <div class="group-actions">
-            <ion-badge *ngIf="group === 'extra' && isExtraLocked()" color="medium">Locked</ion-badge>
-            <ion-button
-              *ngIf="group !== 'extra' && hasMyAssignment(group)"
-              size="small"
-              fill="outline"
-              color="medium"
-              (click)="leaveGroup(group)"
-              [disabled]="busyAction === 'leave-' + group"
-            >
-              {{ busyAction === "leave-" + group ? "Leaving..." : "Leave " + groupTitle(group) }}
-            </ion-button>
-          </div>
+      <section class="activity-column" *ngIf="activityGroups('FLEET').length">
+        <header class="activity-column-heading">
+          <h2>Fleets</h2>
+          <p class="muted">Expand a fleet, then a ship, to view and join its roles.</p>
         </header>
 
-        <div class="slot-list" *ngIf="groupedSlots(group).length; else noSlots">
-          <div class="slot-row" *ngFor="let slot of groupedSlots(group)">
-            <div class="slot-copy">
-              <strong>{{ slot.label }}</strong>
-              <span>{{ slot.category }}</span>
-              <small>{{ slot.assignments.length }}/{{ slot.capacity }}</small>
+        <article class="activity-accordion" *ngFor="let group of activityGroups('FLEET')" [class.my-activity]="hasMyActivityAssignment(group.id)">
+          <button class="accordion-toggle" type="button" (click)="toggleGroup(group.id)" [attr.aria-expanded]="groupExpanded(group.id)">
+            <span class="accordion-chevron" aria-hidden="true">{{ groupExpanded(group.id) ? "−" : "+" }}</span>
+            <span class="accordion-title">
+              <strong>{{ group.name }}</strong>
+              <small>{{ scheduleDescription(group) }}</small>
+            </span>
+            <span class="accordion-summary">
+              <span>{{ groupAssigned(group.id) }}/{{ groupCapacity(group.id) }} assigned</span>
+              <ion-badge *ngIf="hasMyActivityAssignment(group.id)" color="primary">Your fleet</ion-badge>
+              <ion-badge *ngIf="groupConflict(group.id) && !hasMyActivityAssignment(group.id)" color="danger">Conflict</ion-badge>
+            </span>
+          </button>
+
+          <div class="accordion-content" *ngIf="groupExpanded(group.id)">
+            <div class="activity-actions" *ngIf="hasMyActivityAssignment(group.id)">
+              <ion-button size="small" fill="outline" color="medium" (click)="leaveActivityGroup(group)" [disabled]="busyAction === 'leave-group-' + group.id">
+                {{ busyAction === "leave-group-" + group.id ? "Leaving..." : "Leave This Fleet" }}
+              </ion-button>
             </div>
-            <div class="slot-members">
-              <span *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</span>
-              <span class="muted" *ngIf="!slot.assignments.length">Open</span>
+            <p class="timing-note" *ngIf="group.timingNote && group.scheduleMode !== 'AS_DIRECTED'">{{ group.timingNote }}</p>
+            <p class="conflict-note" *ngIf="groupConflict(group.id)">{{ groupConflict(group.id) }}</p>
+
+            <section class="ship-accordion" *ngFor="let ship of shipsForFleet(group.id)">
+              <button class="ship-toggle" type="button" (click)="toggleShip(group.id, ship)" [attr.aria-expanded]="shipExpanded(group.id, ship)">
+                <span class="accordion-chevron" aria-hidden="true">{{ shipExpanded(group.id, ship) ? "−" : "+" }}</span>
+                <strong>{{ ship }}</strong>
+                <span>{{ shipAssigned(group.id, ship) }}/{{ shipCapacity(group.id, ship) }} assigned</span>
+              </button>
+              <div class="ship-content" *ngIf="shipExpanded(group.id, ship)">
+                <div class="slot-row" *ngFor="let slot of slotsForShip(group.id, ship)">
+                  <div class="slot-copy"><strong>{{ slot.label }}</strong><small>{{ slot.assignments.length }}/{{ slot.capacity }}</small></div>
+                  <div class="slot-members"><span *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</span><span class="muted" *ngIf="!slot.assignments.length">Open</span></div>
+                  <ion-button size="small" (click)="joinSlot(slot)" [disabled]="event.status !== 'OPEN' || slotFilled(slot) || !!slotConflict(slot) || busyAction === 'join-' + slot.id">{{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}</ion-button>
+                </div>
+              </div>
+            </section>
+            <p class="muted" *ngIf="!shipsForFleet(group.id).length">No ships in this fleet.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="activity-column" *ngIf="activityGroups('GROUND').length">
+        <header class="activity-column-heading">
+          <h2>Ground Teams</h2>
+          <p class="muted">Expand a team to view and join its roles.</p>
+        </header>
+
+        <article class="activity-accordion" *ngFor="let group of activityGroups('GROUND')" [class.my-activity]="hasMyActivityAssignment(group.id)">
+          <button class="accordion-toggle" type="button" (click)="toggleGroup(group.id)" [attr.aria-expanded]="groupExpanded(group.id)">
+            <span class="accordion-chevron" aria-hidden="true">{{ groupExpanded(group.id) ? "−" : "+" }}</span>
+            <span class="accordion-title"><strong>{{ group.name }}</strong><small>{{ scheduleDescription(group) }}</small></span>
+            <span class="accordion-summary"><span>{{ groupAssigned(group.id) }}/{{ groupCapacity(group.id) }} assigned</span><ion-badge *ngIf="hasMyActivityAssignment(group.id)" color="primary">Your team</ion-badge><ion-badge *ngIf="groupConflict(group.id) && !hasMyActivityAssignment(group.id)" color="danger">Conflict</ion-badge></span>
+          </button>
+          <div class="accordion-content" *ngIf="groupExpanded(group.id)">
+            <div class="activity-actions" *ngIf="hasMyActivityAssignment(group.id)">
+              <ion-button size="small" fill="outline" color="medium" (click)="leaveActivityGroup(group)" [disabled]="busyAction === 'leave-group-' + group.id">{{ busyAction === "leave-group-" + group.id ? "Leaving..." : "Leave This Ground Team" }}</ion-button>
             </div>
-            <ion-button
-              size="small"
-              (click)="joinSlot(slot)"
-              [disabled]="event.status !== 'OPEN' || slotFilled(slot) || (group === 'extra' && isExtraLocked()) || busyAction === 'join-' + slot.id"
-            >
-              {{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}
-            </ion-button>
+            <p class="timing-note" *ngIf="group.timingNote && group.scheduleMode !== 'AS_DIRECTED'">{{ group.timingNote }}</p>
+            <p class="conflict-note" *ngIf="groupConflict(group.id)">{{ groupConflict(group.id) }}</p>
+            <div class="slot-list" *ngIf="slotsForGroup(group.id).length; else noSlots">
+              <div class="slot-row" *ngFor="let slot of slotsForGroup(group.id)">
+                <div class="slot-copy"><strong>{{ slot.label }}</strong><small>{{ slot.assignments.length }}/{{ slot.capacity }}</small></div>
+                <div class="slot-members"><span *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</span><span class="muted" *ngIf="!slot.assignments.length">Open</span></div>
+                <ion-button size="small" (click)="joinSlot(slot)" [disabled]="event.status !== 'OPEN' || slotFilled(slot) || !!slotConflict(slot) || busyAction === 'join-' + slot.id">{{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}</ion-button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <article class="event-panel extra-panel" *ngIf="groupedSlots('extra').length">
+        <header>
+          <div><h2>Extra Crew</h2><p class="muted">Opens when all listed fleet and ground roles are full.</p></div>
+          <ion-badge *ngIf="isExtraLocked()" color="medium">Locked</ion-badge>
+        </header>
+        <div class="slot-list">
+          <div class="slot-row" *ngFor="let slot of groupedSlots('extra')">
+            <div class="slot-copy"><strong>{{ slot.label }}</strong><small>{{ slot.assignments.length }}/{{ slot.capacity }}</small></div>
+            <div class="slot-members"><span *ngFor="let assignment of slot.assignments">{{ assignment.discordTag }}</span><span class="muted" *ngIf="!slot.assignments.length">Open</span></div>
+            <ion-button size="small" (click)="joinSlot(slot)" [disabled]="event.status !== 'OPEN' || slotFilled(slot) || isExtraLocked() || busyAction === 'join-' + slot.id">{{ busyAction === "join-" + slot.id ? "Joining..." : "Join" }}</ion-button>
           </div>
         </div>
       </article>
@@ -95,6 +140,9 @@
   <ng-template #noSlots>
     <p class="muted">No roles in this group.</p>
   </ng-template>
+
+  <app-site-footer />
+  </div>
 </ion-content>
 
 <div class="modal-backdrop" *ngIf="lootOpen && event" (click)="lootOpen = false">
@@ -102,8 +150,9 @@
     <header class="loot-header">
       <div>
         <h2>Loot for {{ event.name }}</h2>
-        <p class="muted" *ngIf="raffle?.endsAt">Ends {{ raffle?.endsAt | date: "medium" }}</p>
-        <p class="muted" *ngIf="!raffle?.endsAt">Loot timer starts when the event is ended.</p>
+        <p class="muted" *ngIf="raffle?.endsAt">Ends {{ raffle?.endsAt | date: "medium" }} · {{ timeZoneLabel }}</p>
+        <p class="muted" *ngIf="raffle?.status === 'OPEN' && !raffle?.endsAt">Loot timer starts when the event is ended.</p>
+        <p class="muted" *ngIf="raffle?.status === 'DRAWN'">This loot pool has been drawn.</p>
       </div>
       <div class="toolbar-actions">
         <ion-badge *ngIf="event.isOwner" color="success">{{ bidProgress }} Participants Bid</ion-badge>
@@ -114,12 +163,27 @@
       </div>
     </header>
 
+    <section class="loot-guidance">
+      <strong>Resource loot rules: {{ event.resourceLootPolicy === 'ANY' ? 'Any form' : event.resourceLootPolicy === 'REFINED_ONLY' ? 'Refined materials only' : event.resourceLootPolicy === 'RAW_ONLY' ? 'Raw resources only' : event.resourceLootPolicy === 'NONE' ? 'No resources' : 'Custom rules' }}</strong>
+      <p *ngIf="event.resourceInstructions">{{ event.resourceInstructions }}</p>
+      <p *ngIf="event.lootInstructions"><strong>Loot instructions:</strong> {{ event.lootInstructions }}</p>
+    </section>
+
     <section class="loot-add">
-      <ion-input label="Add Loot Items" labelPlacement="stacked" [(ngModel)]="newItems" placeholder="Gem, Armor, Weapon" />
-      <ion-button (click)="addLootItems()" [disabled]="!event.canAddLoot || !newItems.trim() || raffle?.status === 'DRAWN'">
-        Add Loot
-      </ion-button>
-      <p class="muted" *ngIf="!event.canAddLoot">Only event participants can add loot.</p>
+      <h3>{{ editingLootItemId ? 'Edit loot item' : 'Add loot item' }}</h3>
+      <div class="loot-form-grid">
+        <label><span>Loot category</span><select [(ngModel)]="lootDraft.category"><option value="RESOURCE">Resource or material</option><option value="WEAPON">Weapon</option><option value="ARMOR">Armor</option><option value="COMPONENT">Component or equipment</option><option value="CONSUMABLE">Consumable</option><option value="OTHER">Other</option></select></label>
+        <label><span>Item or material name</span><input type="text" maxlength="120" [(ngModel)]="lootDraft.name" /></label>
+        <label [class.warning-field]="quantityWarning(lootDraft)"><span>Quantity</span><input type="number" min="1" step="1" [(ngModel)]="lootDraft.quantity" /><small *ngIf="quantityWarning(lootDraft)">{{ quantityWarning(lootDraft) }}</small></label>
+        <label [class.warning-field]="qualityWarning(lootDraft)"><span>Quality <em>optional, 1–1000</em></span><input type="number" min="1" max="1000" step="1" [(ngModel)]="lootDraft.quality" /><small *ngIf="qualityWarning(lootDraft)">{{ qualityWarning(lootDraft) }}</small></label>
+        <label *ngIf="lootDraft.category === 'RESOURCE' || lootDraft.category === 'OTHER'"><span>Unit or package <em>optional</em></span><input type="text" [(ngModel)]="lootDraft.unit" placeholder="boxes, mining bag, gems" /></label>
+      </div>
+      <p class="warning-text" *ngIf="resourceWarning(lootDraft)">{{ resourceWarning(lootDraft) }}</p>
+      <div class="loot-form-actions">
+        <ion-button (click)="saveLootItem()" [disabled]="(!editingLootItemId && !event.canAddLoot) || lootDraftInvalid() || raffle?.status === 'DRAWN'">{{ editingLootItemId ? 'Save Changes' : 'Add Loot' }}</ion-button>
+        <ion-button *ngIf="editingLootItemId" fill="outline" color="medium" (click)="cancelLootEdit()">Cancel</ion-button>
+      </div>
+      <p class="loot-access-message" [class.loot-access-allowed]="event.lootEligibility === 'ALLOWED'">{{ lootEligibilityMessage }}</p>
       <p class="error-panel" *ngIf="lootError">{{ lootError }}</p>
     </section>
 
@@ -128,12 +192,15 @@
         <header>
           <div>
             <h3>{{ item.name }}</h3>
+            <p class="muted">{{ categoryLabel(item.category) }} · Quantity {{ item.quantity }}<span *ngIf="item.quality"> · Quality {{ item.quality }}</span><span *ngIf="item.unit"> · {{ item.unit }}</span></p>
+            <p class="muted">{{ itemAwardDescription() }}</p>
             <p class="muted">Added by {{ item.addedByName }}</p>
           </div>
           <ion-badge>{{ item.bidCount }} bid{{ item.bidCount === 1 ? "" : "s" }}</ion-badge>
         </header>
 
-        <p class="winner" *ngIf="item.winnerTag">Winner: {{ item.winnerTag }}</p>
+        <p class="winner" *ngIf="item.awards.length">Awards: {{ awardSummary(item) }}</p>
+        <p class="muted" *ngIf="raffle?.status === 'DRAWN' && !item.awards.length">No eligible bids.</p>
 
         <ion-list lines="none" *ngIf="event.isOwner && item.bids.length">
           <ion-item class="member-row" *ngFor="let bid of item.bids">
@@ -145,6 +212,7 @@
           <ion-button size="small" (click)="toggleBid(item)" [disabled]="!event.canAddLoot || raffle?.status === 'DRAWN'">
             {{ item.hasMyBid ? "Remove Bid" : "Bid" }}
           </ion-button>
+          <ion-button size="small" fill="outline" (click)="editLootItem(item)" [disabled]="!item.canEdit || raffle?.status === 'DRAWN'">Edit</ion-button>
           <ion-button size="small" color="danger" fill="outline" (click)="removeLootItem(item)" [disabled]="!item.canDelete || raffle?.status === 'DRAWN'">
             Delete
           </ion-button>

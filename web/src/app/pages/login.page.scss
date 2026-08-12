@@ -1,0 +1,22 @@
+:host { display: block; min-height: 100%; }
+.login-page { align-items: center; background: radial-gradient(circle at top, #ffffff 0, #f5f7fb 48%, #e8edf4 100%); display: flex; flex-direction: column; justify-content: center; min-height: 100vh; padding: 32px 18px; position: relative; }
+.login-theme-toggle { position: absolute; right: 24px; top: 22px; }
+.login-card { align-items: center; background: #ffffff; border: 1px solid #d7dde4; border-radius: 12px; box-shadow: 0 22px 55px rgba(16,24,40,.12); display: grid; gap: 36px; grid-template-columns: 210px minmax(0, 1fr); max-width: 760px; padding: 42px; width: 100%; }
+.login-logo { display: block; height: auto; width: 100%; }
+.login-copy { display: grid; gap: 16px; }
+.login-copy h1, .login-copy p { margin: 0; }
+.login-copy h1 { font-size: 30px; line-height: 1.15; }
+.login-copy p { color: #52627a; line-height: 1.55; }
+.login-actions { display: flex; gap: 10px; }
+.login-button { background: #1f6feb; border: 1px solid #1f6feb; border-radius: 7px; color: #ffffff; display: inline-flex; font-weight: 800; justify-content: center; padding: 12px 17px; text-decoration: none; width: fit-content; }
+.login-button.discord { background: #5865f2; border-color: #5865f2; }
+.login-button.secondary { background: #ffffff; border-color: #94a3b8; color: #334155; }
+.privacy-note { font-size: 12px; }
+.configuration-notice { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 7px; color: #92400e !important; padding: 12px; }
+.login-byline { color: #64748b; font-size: 13px; margin: 18px 0 0; }
+:host-context(html[data-theme="dark"]) .login-page { background: radial-gradient(circle at top, #273449 0, #111827 55%, #0b1220 100%); }
+:host-context(html[data-theme="dark"]) .login-card { background: #1f2937; border-color: #4b5563; box-shadow: 0 22px 55px rgba(0,0,0,.35); color: #f3f4f6; }
+:host-context(html[data-theme="dark"]) .login-logo { background: #fffdf8; border-radius: 8px; padding: 5px; }
+:host-context(html[data-theme="dark"]) .login-copy p, :host-context(html[data-theme="dark"]) .login-byline { color: #aeb8c7; }
+:host-context(html[data-theme="dark"]) .login-button.secondary { background: #273449; border-color: #64748b; color: #f3f4f6; }
+@media (max-width: 640px) { .login-card { grid-template-columns: 1fr; padding: 28px; text-align: center; } .login-logo { margin: auto; max-width: 190px; } .login-copy { justify-items: center; } }

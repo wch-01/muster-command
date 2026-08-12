@@ -5,7 +5,17 @@
     <title>Muster Command</title>
     <base href="/app/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
+    <link rel="icon" type="image/svg+xml" href="assets/branding/muster-command-mark.svg" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (() => {
+        const saved = localStorage.getItem("muster-theme");
+        const theme = saved === "dark" || saved === "light"
+          ? saved
+          : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <app-root></app-root>

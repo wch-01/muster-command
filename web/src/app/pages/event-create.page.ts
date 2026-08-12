@@ -7,17 +7,19 @@ import {
   IonCard,
   IonCardContent,
   IonContent,
-  IonInput,
-  IonItem,
-  IonList,
-  IonSelect,
-  IonSelectOption,
-  IonTextarea,
-  IonToggle,
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { EventTabsComponent } from "../components/event-tabs.component";
-import { ApiService, type CreatedEventDetails, type CreateEventInput, type EventTemplateSummary } from "../services/api.service";
+import { SiteFooterComponent } from "../components/site-footer.component";
+import {
+  ApiService,
+  type ActivityGroupInput,
+  type CreatedEventDetails,
+  type CreateEventInput,
+  type EventTemplateSummary,
+  type ScheduleMode,
+} from "../services/api.service";
+import { browserTimeZoneLabel, isoToLocalDateTime, localDateTimeToIso } from "../utils/event-time";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
 
@@ -34,13 +36,25 @@ type CrewRole = {
 };
 
 type ShipGroup = {
-  type: string;
+  name: string;
   crewCount: number;
   roles: CrewRole[];
 };
 
-type GroundTeamGroup = {
+type ScheduleFields = {
+  clientId: string;
   name: string;
+  scheduleMode: ScheduleMode;
+  startsAt: string;
+  predecessorClientId: string;
+  timingNote: string;
+};
+
+type FleetGroup = ScheduleFields & {
+  ships: ShipGroup[];
+};
+
+type GroundTeamGroup = ScheduleFields & {
   crewCount: number;
   roles: CrewRole[];
 };
@@ -54,30 +68,26 @@ type GroundTeamGroup = {
     FormsModule,
     AppMenuComponent,
     EventTabsComponent,
+    SiteFooterComponent,
     IonButton,
     IonCard,
     IonCardContent,
     IonContent,
-    IonInput,
-    IonItem,
-    IonList,
-    IonSelect,
-    IonSelectOption,
-    IonTextarea,
-    IonToggle,
   ],
   templateUrl: "./event-create.page.html",
   styleUrls: ["./event-create.page.scss"],
 })
 export class EventCreatePage implements OnInit {
+  readonly timeZoneLabel = browserTimeZoneLabel();
   saving = false;
   error = "";
   createdEvent?: { id: string; name: string; activeServerName?: string };
   allowExtraCrew = false;
   extraCrewCapacity = 25;
-  ships: ShipGroup[] = [];
+  fleets: FleetGroup[] = [];
   groundTeams: GroundTeamGroup[] = [];
   templates: EventTemplateSummary[] = [];
+  private nextGroupNumber = 1;
   form: CreateEventInput = {
     name: "",
     description: "",
@@ -85,6 +95,11 @@ export class EventCreatePage implements OnInit {
     startsAt: "",
     preset: "combat-op",
     lootDurationHours: 24,
+    resourceLootPolicy: "ANY",
+    resourceInstructions: "",
+    lootInstructions: "",
+    lootAwardMethod: "FULL_QUANTITY",
+    lootRepeatWinnerMode: "DIFFERENT_WINNERS",
   };
 
   constructor(
@@ -108,10 +123,28 @@ export class EventCreatePage implements OnInit {
       return;
     }
 
+    let startsAt: string | undefined;
+    try {
+      startsAt = localDateTimeToIso(this.form.startsAt ?? "");
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : "Enter a valid event start time.";
+      return;
+    }
+
+    let groups: ActivityGroupInput[];
+    try {
+      groups = this.groupsForSubmit();
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : "Check the fleet and ground-team schedules.";
+      return;
+    }
+
     const input = {
       ...this.form,
+      startsAt,
       preset: "custom",
-      customSlots: this.customSlotsForSubmit(),
+      groups,
+      extraCrewCapacity: this.allowExtraCrew ? this.safeCapacity(this.extraCrewCapacity) : undefined,
     };
     this.saving = true;
     this.error = "";
@@ -135,6 +168,11 @@ export class EventCreatePage implements OnInit {
         startsAt: "",
         preset: this.defaultTemplateId() ?? "combat-op",
         lootDurationHours: 24,
+        resourceLootPolicy: "ANY",
+        resourceInstructions: "",
+        lootInstructions: "",
+        lootAwardMethod: "FULL_QUANTITY",
+        lootRepeatWinnerMode: "DIFFERENT_WINNERS",
       };
       this.applyTemplate(this.form.preset);
       await this.router.navigate(["/events", eventId], {
@@ -190,7 +228,7 @@ export class EventCreatePage implements OnInit {
   }
 
   shipRoles() {
-    return this.ships.flatMap((ship) => ship.roles);
+    return this.fleets.flatMap((fleet) => fleet.ships).flatMap((ship) => ship.roles);
   }
 
   groundRoles() {
@@ -225,11 +263,27 @@ export class EventCreatePage implements OnInit {
     });
   }
 
-  addShip() {
-    this.ships = [
-      ...this.ships,
+  addFleet() {
+    this.fleets = [
+      ...this.fleets,
       {
-        type: `Ship ${this.ships.length + 1}`,
+        ...this.scheduleDefaults("FLEET", this.fleets.length),
+        ships: [this.defaultShip(1)],
+      },
+    ];
+  }
+
+  removeFleet(index: number) {
+    const removed = this.fleets[index];
+    this.fleets = this.fleets.filter((_, fleetIndex) => fleetIndex !== index);
+    this.clearRemovedPredecessor(removed?.clientId);
+  }
+
+  addShip(fleet: FleetGroup) {
+    fleet.ships = [
+      ...fleet.ships,
+      {
+        name: `Ship ${fleet.ships.length + 1}`,
         crewCount: 4,
         roles: [
           { label: "Pilot", capacity: 1 },
@@ -239,8 +293,8 @@ export class EventCreatePage implements OnInit {
     ];
   }
 
-  removeShip(index: number) {
-    this.ships = this.ships.filter((_, shipIndex) => shipIndex !== index);
+  removeShip(fleet: FleetGroup, index: number) {
+    fleet.ships = fleet.ships.filter((_, shipIndex) => shipIndex !== index);
   }
 
   addShipRole(ship: ShipGroup) {
@@ -255,7 +309,7 @@ export class EventCreatePage implements OnInit {
     this.groundTeams = [
       ...this.groundTeams,
       {
-        name: `Ground team ${this.groundTeams.length + 1}`,
+        ...this.scheduleDefaults("GROUND", this.groundTeams.length),
         crewCount: 5,
         roles: [
           { label: "Combat", capacity: 4 },
@@ -266,7 +320,9 @@ export class EventCreatePage implements OnInit {
   }
 
   removeGroundTeam(index: number) {
+    const removed = this.groundTeams[index];
     this.groundTeams = this.groundTeams.filter((_, teamIndex) => teamIndex !== index);
+    this.clearRemovedPredecessor(removed?.clientId);
   }
 
   addGroundRole(team: GroundTeamGroup) {
@@ -281,51 +337,63 @@ export class EventCreatePage implements OnInit {
     return roles.reduce((total, role) => total + this.safeCapacity(role.capacity), 0);
   }
 
+  allActivityGroups(): ScheduleFields[] {
+    return [...this.fleets, ...this.groundTeams];
+  }
+
+  predecessorChoices(group: ScheduleFields) {
+    return this.allActivityGroups().filter((candidate) => candidate.clientId !== group.clientId);
+  }
+
+  scheduleDescription(group: ScheduleFields) {
+    if (group.scheduleMode === "EVENT_START") return "At event start";
+    if (group.scheduleMode === "SPECIFIC_TIME") {
+      return group.startsAt ? `${group.startsAt.replace("T", " ")} (${this.timeZoneLabel})` : "Specific time not set";
+    }
+    if (group.scheduleMode === "AFTER_GROUP") {
+      const predecessor = this.allActivityGroups().find((item) => item.clientId === group.predecessorClientId);
+      return predecessor ? `After ${predecessor.name}` : "Preceding group not selected";
+    }
+    return group.timingNote.trim() || "As directed";
+  }
+
   private applyTemplate(preset: string) {
     if (preset === "custom") {
-      this.ships = [
-        {
-          type: "Ship 1",
-          crewCount: 4,
-          roles: [
-            { label: "Pilot", capacity: 1 },
-            { label: "Crew", capacity: 3 },
-          ],
-        },
-      ];
-      this.groundTeams = [
-        {
-          name: "Ground team 1",
-          crewCount: 5,
-          roles: [
-            { label: "Combat", capacity: 4 },
-            { label: "Medic", capacity: 1 },
-          ],
-        },
-      ];
+      this.resetDefaultGroups();
       return;
     }
 
     const template = this.templates.find((item) => item.id === preset);
     if (template) {
       this.applyTemplateSlots(template);
+      this.form.lootDurationHours = template.lootDurationHours;
+      this.form.resourceLootPolicy = template.resourceLootPolicy;
+      this.form.resourceInstructions = template.resourceInstructions ?? "";
+      this.form.lootInstructions = template.lootInstructions ?? "";
+      this.form.lootAwardMethod = template.lootAwardMethod;
+      this.form.lootRepeatWinnerMode = template.lootRepeatWinnerMode;
       return;
     }
 
-    this.ships = [
+    this.fleets = [
       {
-        type: "Capital ship 1",
-        crewCount: 5,
-        roles: [
-          { label: "Big ship captain", capacity: 1 },
-          { label: "Gunner", capacity: 2 },
-          { label: "Fighter pilot", capacity: 2 },
+        ...this.scheduleDefaults("FLEET", 0),
+        ships: [
+          {
+            name: "Capital Ship 1",
+            crewCount: 5,
+            roles: [
+              { label: "Big ship captain", capacity: 1 },
+              { label: "Gunner", capacity: 2 },
+              { label: "Fighter pilot", capacity: 2 },
+            ],
+          },
         ],
       },
     ];
     this.groundTeams = [
       {
-        name: "Ground team 1",
+        ...this.scheduleDefaults("GROUND", 0),
         crewCount: 6,
         roles: [
           { label: "Combat heavy", capacity: 1 },
@@ -337,27 +405,100 @@ export class EventCreatePage implements OnInit {
     ];
   }
 
+  private resetDefaultGroups() {
+    this.nextGroupNumber = 1;
+    this.fleets = [{ ...this.scheduleDefaults("FLEET", 0), ships: [this.defaultShip(1)] }];
+    this.groundTeams = [
+      {
+        ...this.scheduleDefaults("GROUND", 0),
+        crewCount: 5,
+        roles: [
+          { label: "Combat", capacity: 4 },
+          { label: "Medic", capacity: 1 },
+        ],
+      },
+    ];
+  }
+
   private applyTemplateSlots(template: EventTemplateSummary) {
+    if (!template.groups?.length) {
+      this.applyLegacyTemplateSlots(template);
+      return;
+    }
+
+    const clientIds = new Map(template.groups.map((group) => [group.id, this.newClientId()]));
+    this.fleets = template.groups
+      .filter((group) => group.kind === "FLEET")
+      .map((group, fleetIndex) => {
+        const shipRoles = new Map<string, CrewRole[]>();
+        for (const slot of template.slots.filter((item) => item.groupId === group.id)) {
+          const roles = shipRoles.get(slot.category) ?? [];
+          roles.push({ label: slot.label, capacity: slot.capacity });
+          shipRoles.set(slot.category, roles);
+        }
+        return {
+          clientId: clientIds.get(group.id)!,
+          name: group.name || `Fleet ${fleetIndex + 1}`,
+          scheduleMode: group.scheduleMode,
+          startsAt: isoToLocalDateTime(group.startsAt),
+          predecessorClientId: group.predecessorGroupId ? clientIds.get(group.predecessorGroupId) ?? "" : "",
+          timingNote: group.timingNote ?? "",
+          ships: [...shipRoles].map(([name, roles], shipIndex) => ({
+            name: name || `Ship ${shipIndex + 1}`,
+            crewCount: this.roleTotal(roles),
+            roles,
+          })),
+        };
+      });
+
+    this.groundTeams = template.groups
+      .filter((group) => group.kind === "GROUND")
+      .map((group, teamIndex) => {
+        const roles = template.slots
+          .filter((item) => item.groupId === group.id)
+          .map((slot) => ({ label: slot.label, capacity: slot.capacity }));
+        return {
+          clientId: clientIds.get(group.id)!,
+          name: group.name || `Ground Team ${teamIndex + 1}`,
+          scheduleMode: group.scheduleMode,
+          startsAt: isoToLocalDateTime(group.startsAt),
+          predecessorClientId: group.predecessorGroupId ? clientIds.get(group.predecessorGroupId) ?? "" : "",
+          timingNote: group.timingNote ?? "",
+          crewCount: this.roleTotal(roles),
+          roles,
+        };
+      });
+
+    if (!this.fleets.length && !this.groundTeams.length) this.resetDefaultGroups();
+  }
+
+  private applyLegacyTemplateSlots(template: EventTemplateSummary) {
     const shipGroups = new Map<string, CrewRole[]>();
     const groundGroups = new Map<string, CrewRole[]>();
-
     for (const slot of template.slots) {
       const target = slot.assignmentGroup === "ground" ? groundGroups : shipGroups;
       const roles = target.get(slot.category) ?? [];
       roles.push({ label: slot.label, capacity: slot.capacity });
       target.set(slot.category, roles);
     }
-
-    this.ships = Array.from(shipGroups.entries()).map(([type, roles], index) => ({
-      type: type || `Ship ${index + 1}`,
+    this.fleets = shipGroups.size
+      ? [{
+          ...this.scheduleDefaults("FLEET", 0),
+          ships: [...shipGroups].map(([name, roles], index) => ({
+            name: name || `Ship ${index + 1}`,
+            crewCount: this.roleTotal(roles),
+            roles,
+          })),
+        }]
+      : [];
+    this.groundTeams = [
+      ...[...groundGroups].map(([name, roles], index) => ({
+      ...this.scheduleDefaults("GROUND", index),
+      name: name || `Ground Team ${index + 1}`,
       crewCount: this.roleTotal(roles),
       roles,
-    }));
-    this.groundTeams = Array.from(groundGroups.entries()).map(([name, roles], index) => ({
-      name: name || `Ground team ${index + 1}`,
-      crewCount: this.roleTotal(roles),
-      roles,
-    }));
+      }))
+    ];
   }
 
   private defaultTemplateId() {
@@ -394,20 +535,22 @@ export class EventCreatePage implements OnInit {
   private buildSlots() {
     const slots: RoleTemplate[] = [];
 
-    for (const [shipIndex, ship] of this.ships.entries()) {
-      const category = ship.type.trim() || `Ship ${shipIndex + 1}`;
-      for (const role of ship.roles) {
-        slots.push({
-          category,
-          group: "ship",
-          label: role.label.trim() || "Crew",
-          capacity: this.safeCapacity(role.capacity),
-        });
+    for (const fleet of this.fleets) {
+      for (const [shipIndex, ship] of fleet.ships.entries()) {
+        const category = ship.name.trim() || `Ship ${shipIndex + 1}`;
+        for (const role of ship.roles) {
+          slots.push({
+            category,
+            group: "ship",
+            label: role.label.trim() || "Crew",
+            capacity: this.safeCapacity(role.capacity),
+          });
+        }
       }
     }
 
     for (const [teamIndex, team] of this.groundTeams.entries()) {
-      const category = team.name.trim() || `Ground team ${teamIndex + 1}`;
+      const category = team.name.trim() || `Ground Team ${teamIndex + 1}`;
       for (const role of team.roles) {
         slots.push({
           category,
@@ -430,10 +573,71 @@ export class EventCreatePage implements OnInit {
     return slots;
   }
 
-  private customSlotsForSubmit() {
-    return this.buildSlots()
-      .map((slot) => `${slot.label}:${slot.capacity}:${slot.category}:${slot.group}`)
-      .join("; ");
+  private groupsForSubmit(): ActivityGroupInput[] {
+    return [...this.fleets.map((fleet, index) => ({
+      clientId: fleet.clientId,
+      kind: "FLEET" as const,
+      name: fleet.name.trim() || `Fleet ${index + 1}`,
+      ...this.scheduleForSubmit(fleet),
+      ships: fleet.ships.map((ship, shipIndex) => ({
+        name: ship.name.trim() || `Ship ${shipIndex + 1}`,
+        roles: ship.roles.map((role) => ({
+          label: role.label.trim() || "Crew",
+          capacity: this.safeCapacity(role.capacity),
+        })),
+      })),
+    })), ...this.groundTeams.map((team, index) => ({
+      clientId: team.clientId,
+      kind: "GROUND" as const,
+      name: team.name.trim() || `Ground Team ${index + 1}`,
+      ...this.scheduleForSubmit(team),
+      roles: team.roles.map((role) => ({
+        label: role.label.trim() || "Ground Crew",
+        capacity: this.safeCapacity(role.capacity),
+      })),
+    }))];
+  }
+
+  private scheduleForSubmit(group: ScheduleFields) {
+    return {
+      scheduleMode: group.scheduleMode,
+      startsAt: group.scheduleMode === "SPECIFIC_TIME" ? localDateTimeToIso(group.startsAt) : undefined,
+      predecessorClientId: group.scheduleMode === "AFTER_GROUP" ? group.predecessorClientId || undefined : undefined,
+      timingNote: group.timingNote.trim() || undefined,
+    };
+  }
+
+  private scheduleDefaults(kind: "FLEET" | "GROUND", index: number): ScheduleFields {
+    return {
+      clientId: this.newClientId(),
+      name: kind === "FLEET" ? `Fleet ${index + 1}` : `Ground Team ${index + 1}`,
+      scheduleMode: kind === "FLEET" && index === 0 ? "EVENT_START" : "AS_DIRECTED",
+      startsAt: "",
+      predecessorClientId: "",
+      timingNote: "",
+    };
+  }
+
+  private defaultShip(index: number): ShipGroup {
+    return {
+      name: `Ship ${index}`,
+      crewCount: 4,
+      roles: [
+        { label: "Pilot", capacity: 1 },
+        { label: "Crew", capacity: 3 },
+      ],
+    };
+  }
+
+  private newClientId() {
+    return `group-${this.nextGroupNumber++}`;
+  }
+
+  private clearRemovedPredecessor(clientId?: string) {
+    if (!clientId) return;
+    for (const group of this.allActivityGroups()) {
+      if (group.predecessorClientId === clientId) group.predecessorClientId = "";
+    }
   }
 
   private safeCapacity(capacity: number) {

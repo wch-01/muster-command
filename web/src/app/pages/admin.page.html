@@ -1,0 +1,65 @@
+<app-menu active="admin" />
+<ion-content [scrollY]="true">
+  <div class="site-page-frame">
+    <main class="page-shell admin-page">
+      <header><h1>Admin</h1><p class="muted">Manage how this server uses the bot.</p></header>
+      <p class="notice-panel" *ngIf="notice">{{ notice }}</p>
+      <p class="error-panel" *ngIf="error">{{ error }}</p>
+
+      <ng-container *ngIf="data as admin">
+        <section class="settings-panel">
+          <h2>Bot Status</h2>
+          <p>{{ admin.inviteUrl ? "Muster is ready to be authorized for the selected server." : "Application ID is needed before permission links can be generated." }}</p>
+          <a class="mini-button" *ngIf="admin.inviteUrl" [href]="admin.inviteUrl" target="_blank" rel="noreferrer">Re-authorize / Update permissions</a>
+        </section>
+
+        <section class="settings-panel">
+          <h2>Bot Output</h2>
+          <label class="checkbox-row"><input type="checkbox" [(ngModel)]="admin.settings.discordEventPublishingEnabled" /> Publish website events and updates to Discord</label>
+          <p class="muted">Disabled by default while the website workflow is being developed.</p>
+          <div class="form-grid">
+            <label>Event output method
+              <select [(ngModel)]="admin.settings.eventOutputMode"><option value="channel">Dedicated channels</option><option value="thread">One thread per event</option></select>
+            </label>
+            <label>Event output channel
+              <select [(ngModel)]="admin.settings.eventOutputChannelId">
+                <option value="">{{ channels.length ? "Select a channel" : "No eligible text channels found" }}</option>
+                <option *ngIf="admin.settings.eventOutputChannelId && !channelExists(admin.settings.eventOutputChannelId)" [value]="admin.settings.eventOutputChannelId">Saved channel ({{ admin.settings.eventOutputChannelId }})</option>
+                <option *ngFor="let channel of channels" [value]="channel.id">#{{ channel.name }}</option>
+              </select>
+            </label>
+            <label *ngIf="admin.settings.eventOutputMode === 'channel'">Loot output channel ID
+              <input type="text" [(ngModel)]="admin.settings.lootOutputChannelId" autocomplete="off" />
+            </label>
+            <label *ngIf="admin.settings.eventOutputMode === 'thread'">Thread cleanup after loot draw, in days
+              <input type="number" min="1" max="30" [(ngModel)]="admin.settings.threadAutoDeleteDays" />
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-panel">
+          <h2>Template Permissions</h2>
+          <p class="muted">Choose the roles and users allowed to manage event templates.</p>
+          <div class="permission-grid">
+            <div><h3>Manager roles</h3>
+              <label class="checkbox-row" *ngFor="let role of admin.permissions.roles"><input type="checkbox" [checked]="selected(admin.settings.templateControlRoleIds, role.id)" (change)="toggle(admin.settings.templateControlRoleIds, role.id, $any($event.target).checked)" /> {{ role.name }}</label>
+              <p class="muted" *ngIf="!admin.permissions.roles.length">No selectable roles found.</p>
+            </div>
+            <div><h3>Manager users</h3>
+              <ng-container *ngIf="admin.permissions.userListAvailable; else manualUsers">
+                <label class="checkbox-row" *ngFor="let user of admin.permissions.users"><input type="checkbox" [checked]="selected(admin.settings.templateControlUserIds, user.id)" (change)="toggle(admin.settings.templateControlUserIds, user.id, $any($event.target).checked)" /> {{ user.name }} <span class="muted">({{ user.username }})</span></label>
+              </ng-container>
+              <ng-template #manualUsers>
+                <p class="muted">Discord did not return the member list. Add Discord user IDs manually.</p>
+                <div class="manual-user" *ngFor="let value of admin.settings.templateControlUserIds; let index = index"><input type="text" [(ngModel)]="admin.settings.templateControlUserIds[index]" placeholder="Discord user ID" /><button class="mini-button danger" type="button" (click)="removeManualUser(index)">Remove</button></div>
+                <button class="mini-button" type="button" (click)="addManualUser()">+ Add user</button>
+              </ng-template>
+            </div>
+          </div>
+          <div class="actions"><button class="mini-button primary" type="button" [disabled]="saving" (click)="save()">{{ saving ? "Saving…" : "Save Admin Settings" }}</button></div>
+        </section>
+      </ng-container>
+    </main>
+    <app-site-footer />
+  </div>
+</ion-content>

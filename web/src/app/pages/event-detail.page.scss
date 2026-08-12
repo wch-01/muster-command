@@ -1,5 +1,11 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+ion-content {
+  min-height: 0;
 }
 
 .event-detail {
@@ -86,13 +92,221 @@
 
 .signup-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  align-items: start;
-  gap: 14px;
+  gap: 18px;
 }
 
-.event-panel h2 {
+.event-panel h2,
+.activity-column h2 {
   margin: 0;
+}
+
+.activity-column {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-column-heading {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.activity-column-heading p {
+  margin: 0;
+}
+
+.activity-accordion {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.activity-accordion.my-activity {
+  border-color: #93b4e8;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.accordion-toggle,
+.ship-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.accordion-toggle {
+  background: #f8fafc;
+  gap: 12px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  min-height: 68px;
+  padding: 12px 16px;
+}
+
+.accordion-toggle:hover,
+.accordion-toggle:focus-visible {
+  background: #eef4fb;
+}
+
+.accordion-chevron {
+  align-items: center;
+  background: #e2e8f0;
+  border-radius: 50%;
+  color: #334155;
+  display: inline-flex;
+  font-size: 20px;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.accordion-title,
+.accordion-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.accordion-title strong {
+  font-size: 18px;
+}
+
+.accordion-title small,
+.accordion-summary {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.accordion-summary {
+  justify-items: end;
+}
+
+.accordion-content {
+  border-top: 1px solid #d8dee9;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.activity-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.timing-note {
+  background: #f8fafc;
+  border-left: 3px solid #94a3b8;
+  color: #475569;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.conflict-note {
+  background: #fff1f2;
+  border-left: 3px solid #e11d48;
+  color: #9f1239;
+  font-weight: 700;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.ship-accordion {
+  border-left: 4px solid #7c93b2;
+  box-shadow: inset 0 1px 0 #e2e8f0, inset 0 -1px 0 #e2e8f0;
+}
+
+.ship-toggle {
+  gap: 10px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  padding: 10px 12px;
+}
+
+.ship-toggle:hover,
+.ship-toggle:focus-visible {
+  background: #f8fafc;
+}
+
+.ship-toggle > span:last-child {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.ship-content {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px 50px;
+}
+
+.extra-panel {
+  padding: 16px;
+}
+
+:host-context(html[data-theme="dark"]) {
+  .event-hero,
+  .event-controls,
+  .loot-modal,
+  .loot-item,
+  .activity-accordion {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .event-controls h1,
+  .event-hero > p,
+  .activity-column h2 {
+    color: #f3f4f6;
+  }
+
+  .event-meta,
+  .accordion-title small,
+  .accordion-summary,
+  .ship-toggle > span:last-child {
+    color: #9ca3af;
+  }
+
+  .accordion-toggle,
+  .ship-toggle {
+    color: #f3f4f6;
+  }
+
+  .accordion-toggle {
+    background: #273449;
+  }
+
+  .accordion-toggle:hover,
+  .accordion-toggle:focus-visible,
+  .ship-toggle:hover,
+  .ship-toggle:focus-visible {
+    background: #334155;
+  }
+
+  .accordion-content,
+  .ship-accordion {
+    border-color: #4b5563;
+  }
+
+  .timing-note {
+    background: #273449;
+    color: #cbd5e1;
+  }
+}
+
+.extra-panel > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.extra-panel p {
+  margin-bottom: 0;
 }
 
 .slot-list {
@@ -149,13 +363,35 @@
 }
 
 .loot-add {
-  align-items: end;
+  display: block;
   margin: 16px 0;
 }
 
-.loot-add ion-input {
-  flex: 1;
-  min-width: 240px;
+.loot-guidance {
+  background: #eef6ff;
+  border-left: 4px solid #2563eb;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.loot-guidance p { margin: 5px 0 0; }
+.loot-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.loot-form-grid label { display: grid; gap: 5px; color: #334155; font-size: 13px; font-weight: 700; }
+.loot-form-grid input, .loot-form-grid select { background: #fff; border: 1px solid #aebdd0; border-radius: 6px; min-height: 40px; padding: 8px 10px; }
+.loot-form-grid em { color: #64748b; font-size: 12px; font-style: normal; font-weight: 400; }
+.loot-form-grid .warning-field input { border: 2px solid #dc2626; }
+.loot-form-grid small, .warning-text { color: #b42318; }
+.loot-form-actions { align-items: center; display: flex; gap: 8px; margin-top: 10px; }
+
+.loot-access-message {
+  color: #92400e;
+  flex-basis: 100%;
+  font-size: 13px;
+  margin: 0;
+}
+
+.loot-access-allowed {
+  color: #12624b;
 }
 
 .loot-grid {
@@ -197,6 +433,25 @@
 }
 
 @media (max-width: 720px) {
+  .activity-column-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .accordion-toggle {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .accordion-summary {
+    grid-column: 2;
+    justify-items: start;
+  }
+
+  .ship-content {
+    padding-left: 12px;
+  }
+
   .slot-row {
     grid-template-columns: 1fr;
   }
@@ -204,4 +459,6 @@
   .loot-modal {
     max-height: 92vh;
   }
+
+  .loot-form-grid { grid-template-columns: 1fr; }
 }

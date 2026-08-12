@@ -2,11 +2,21 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db.js";
 import { createEvent, endEvent, eventInclude } from "./events/event-service.js";
-import { addLootItems, drawRaffleByEventId, lootInclude } from "./loot/loot-service.js";
+import { addLootItems, drawRaffleByEventId, lootInclude, updateLootItem } from "./loot/loot-service.js";
 import { type SlotPresetName, slotPresets, type SlotSeed } from "./slot-presets.js";
 import type { AuthenticatedUser } from "./auth.js";
 import { notifyEventsChanged } from "./event-stream.js";
 import { botGuildTextChannels, publishEventPanel, publishLootPanel } from "./bot-runtime.js";
+import { parseEventStart } from "./event-input.js";
+import { lootEligibility } from "./loot/loot-eligibility.js";
+import { normalizeLootItem } from "./loot/loot-rules.js";
+import {
+  activityGroupsFromSlots,
+  normalizeActivityGroups,
+  type ActivityGroupSeed,
+} from "./event-groups.js";
+import { assignUserToSlot } from "./events/assignment-service.js";
+import { findScheduleConflict, scheduleConflictMessage } from "./events/schedule-conflicts.js";
 
 const json = (response: ServerResponse, statusCode: number, data: unknown) => {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
@@ -34,29 +44,17 @@ const readJsonBody = async <T>(request: IncomingMessage): Promise<T> => {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as T;
 };
 
-const parseDate = (value: unknown) => {
-  if (typeof value !== "string" || !value.trim()) {
-    return undefined;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    throw new Error("Invalid date.");
-  }
-
-  return date;
-};
-
 const parseItems = (value: unknown) => {
   if (Array.isArray(value)) {
-    return value.map(String).map((item) => item.trim()).filter(Boolean);
+    return value.map((item) => typeof item === "string" ? normalizeLootItem({ name: item }) : normalizeLootItem(item));
   }
 
   if (typeof value === "string") {
     return value
       .split(",")
       .map((item) => item.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((name) => normalizeLootItem({ name }));
   }
 
   return [];
@@ -73,8 +71,73 @@ const defaultCombatOpTemplate: SlotSeed[] = [
 ];
 
 const templateInclude = {
+  groups: { orderBy: { sortOrder: "asc" } },
   slots: { orderBy: { sortOrder: "asc" } },
 } satisfies Prisma.EventTemplateInclude;
+
+type LootSettingsBody = {
+  lootDurationHours?: number;
+  resourceLootPolicy?: string;
+  resourceInstructions?: string;
+  lootInstructions?: string;
+  lootAwardMethod?: string;
+  lootRepeatWinnerMode?: string;
+};
+
+const lootSettingsData = (body: LootSettingsBody) => ({
+  lootDurationHours: body.lootDurationHours === 48 ? 48 : 24,
+  resourceLootPolicy: ["ANY", "REFINED_ONLY", "RAW_ONLY", "NONE", "CUSTOM"].includes(body.resourceLootPolicy ?? "") ? body.resourceLootPolicy! : "ANY",
+  resourceInstructions: body.resourceInstructions?.trim() || null,
+  lootInstructions: body.lootInstructions?.trim() || null,
+  lootAwardMethod: body.lootAwardMethod === "INDIVIDUAL_UNITS" ? "INDIVIDUAL_UNITS" : "FULL_QUANTITY",
+  lootRepeatWinnerMode: body.lootRepeatWinnerMode === "ALLOW_REPEATS" ? "ALLOW_REPEATS" : "DIFFERENT_WINNERS",
+});
+
+const writeTemplateGroups = async (
+  tx: Prisma.TransactionClient,
+  templateId: string,
+  groups: ActivityGroupSeed[],
+) => {
+  const createdGroups = new Map<string, string>();
+  let slotOrder = 0;
+  for (const [groupIndex, group] of groups.entries()) {
+    const createdGroup = await tx.eventTemplateGroup.create({
+      data: {
+        templateId,
+        kind: group.kind,
+        name: group.name,
+        scheduleMode: group.scheduleMode,
+        startsAt: group.startsAt,
+        timingNote: group.timingNote,
+        sortOrder: groupIndex,
+      },
+    });
+    createdGroups.set(group.key, createdGroup.id);
+    const roles = group.kind === "FLEET"
+      ? group.ships.flatMap((ship) => ship.roles.map((role) => ({ ...role, category: ship.name })))
+      : group.roles.map((role) => ({ ...role, category: group.name }));
+    for (const role of roles) {
+      await tx.eventTemplateSlot.create({
+        data: {
+          templateId,
+          groupId: createdGroup.id,
+          category: role.category,
+          assignmentGroup: group.kind === "FLEET" ? "ship" : "ground",
+          label: role.label,
+          capacity: role.capacity,
+          sortOrder: slotOrder++,
+        },
+      });
+    }
+  }
+  for (const group of groups) {
+    if (!group.predecessorKey) continue;
+    await tx.eventTemplateGroup.update({
+      where: { id: createdGroups.get(group.key)! },
+      data: { predecessorGroupId: createdGroups.get(group.predecessorKey) },
+    });
+  }
+};
 
 const normalizeTemplateSlots = (value: unknown): SlotSeed[] => {
   if (!Array.isArray(value)) {
@@ -109,29 +172,21 @@ const ensureDefaultTemplate = async (guildId: string) => {
     return;
   }
 
-  await prisma.eventTemplate.create({
-    data: {
+  await prisma.$transaction(async (tx) => {
+    const template = await tx.eventTemplate.create({ data: {
       guildId,
       createdById: "system",
       createdByName: "Muster Command",
       name: "Combat Op",
       isDefault: true,
-      slots: {
-        create: defaultCombatOpTemplate.map((slot, index) => ({
-          category: slot.category,
-          assignmentGroup: slot.assignmentGroup,
-          label: slot.label,
-          capacity: slot.capacity,
-          sortOrder: index,
-        })),
-      },
-    },
+    } });
+    await writeTemplateGroups(tx, template.id, activityGroupsFromSlots(defaultCombatOpTemplate, true));
   });
 };
 
 const eventDetails = async (
   eventId: string,
-  context: { userId?: string } = {},
+  context: { userId?: string; hasActiveGuildProfile?: boolean } = {},
 ) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -167,7 +222,23 @@ const eventDetails = async (
   const myAssignmentGroups = context.userId
     ? [...new Set(members.filter((member) => member.id === context.userId).map((member) => member.group))]
     : [];
+  const myAssignmentGroupIds = context.userId
+    ? [...new Set(event.slots
+      .filter((slot) => slot.groupId && slot.assignments.some((assignment) => assignment.discordUserId === context.userId))
+      .map((slot) => slot.groupId!))]
+    : [];
+  const myAssignedGroups = event.groups.filter((group) => myAssignmentGroupIds.includes(group.id));
+  const signupConflicts = Object.fromEntries(event.groups.flatMap((group) => {
+    const conflict = findScheduleConflict(group, myAssignedGroups.filter((assigned) => assigned.id !== group.id));
+    return conflict ? [[group.id, scheduleConflictMessage(conflict)]] : [];
+  }));
   const participantsWithBid = new Set(members.filter((member) => member.hasBid).map((member) => member.id));
+  const eligibility = lootEligibility({
+    isLoggedIn: Boolean(context.userId),
+    hasActiveGuildProfile: Boolean(context.hasActiveGuildProfile),
+    isParticipant: Boolean(context.userId && participantIds.has(context.userId)),
+    isPoolDrawn: event.raffles[0]?.status === "DRAWN",
+  });
   const raffles = event.raffles.map((raffle) => ({
     ...raffle,
     items: raffle.items.map((item) => ({
@@ -177,6 +248,7 @@ const eventDetails = async (
         ? item.bids.some((bid) => bid.discordUserId === context.userId)
         : false,
       canDelete: Boolean(context.userId && (isOwner || item.addedById === context.userId)),
+      canEdit: Boolean(context.userId && (isOwner || item.addedById === context.userId)),
       bids: isOwner ? item.bids : [],
     })),
   }));
@@ -187,9 +259,12 @@ const eventDetails = async (
     isOwner,
     members,
     myAssignmentGroups,
+    myAssignmentGroupIds,
+    signupConflicts,
     participantCount: participantIds.size,
     participantsWithBidCount: participantsWithBid.size,
-    canAddLoot: Boolean(context.userId && participantIds.has(context.userId)),
+    canAddLoot: eligibility === "ALLOWED",
+    lootEligibility: eligibility,
   };
 };
 
@@ -219,6 +294,10 @@ export const handleApiRequest = async (
   sharedServers: Array<{ id: string; name: string; iconUrl?: string }> = [],
 ) => {
   try {
+    const eventContext = {
+      userId: user?.id,
+      hasActiveGuildProfile: Boolean(activeGuildProfileName),
+    };
     if (request.method === "GET" && url.pathname === "/api/guild/channels") {
       if (!activeGuildId) {
         json(response, 200, { channels: [] });
@@ -293,16 +372,23 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const body = await readJsonBody<{ name?: string; slots?: unknown }>(request).catch(() => ({}) as any);
+      const body = await readJsonBody<{ name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody>(request).catch(() => ({} as { name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody));
       const name = body.name?.trim();
       const slots = normalizeTemplateSlots(body.slots);
+      let groups: ActivityGroupSeed[];
+      try {
+        groups = body.groups ? normalizeActivityGroups(body.groups) : activityGroupsFromSlots(slots, true);
+      } catch (error) {
+        json(response, 400, { error: error instanceof Error ? error.message : "Invalid template groups." });
+        return true;
+      }
 
       if (!name) {
         json(response, 400, { error: "Template name is required." });
         return true;
       }
 
-      if (!slots.length) {
+      if (!groups.length) {
         json(response, 400, { error: "Add at least one fleet or ground role." });
         return true;
       }
@@ -315,23 +401,16 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const template = await prisma.eventTemplate.create({
-        data: {
+      const template = await prisma.$transaction(async (tx) => {
+        const created = await tx.eventTemplate.create({ data: {
           guildId: activeGuildId,
           createdById: user.id,
           createdByName: activeGuildProfileName,
           name,
-          slots: {
-            create: slots.map((slot, index) => ({
-              category: slot.category,
-              assignmentGroup: slot.assignmentGroup,
-              label: slot.label,
-              capacity: slot.capacity,
-              sortOrder: index,
-            })),
-          },
-        },
-        include: templateInclude,
+          ...lootSettingsData(body),
+        } });
+        await writeTemplateGroups(tx, created.id, groups);
+        return tx.eventTemplate.findUniqueOrThrow({ where: { id: created.id }, include: templateInclude });
       });
 
       json(response, 201, { template });
@@ -353,16 +432,23 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const body = await readJsonBody<{ name?: string; slots?: unknown }>(request).catch(() => ({}) as any);
+      const body = await readJsonBody<{ name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody>(request).catch(() => ({} as { name?: string; slots?: unknown; groups?: unknown } & LootSettingsBody));
       const name = body.name?.trim();
       const slots = normalizeTemplateSlots(body.slots);
+      let groups: ActivityGroupSeed[];
+      try {
+        groups = body.groups ? normalizeActivityGroups(body.groups) : activityGroupsFromSlots(slots, true);
+      } catch (error) {
+        json(response, 400, { error: error instanceof Error ? error.message : "Invalid template groups." });
+        return true;
+      }
 
       if (!name) {
         json(response, 400, { error: "Template name is required." });
         return true;
       }
 
-      if (!slots.length) {
+      if (!groups.length) {
         json(response, 400, { error: "Add at least one fleet or ground role." });
         return true;
       }
@@ -377,22 +463,13 @@ export const handleApiRequest = async (
 
       const template = await prisma.$transaction(async (tx) => {
         await tx.eventTemplateSlot.deleteMany({ where: { templateId: existing.id } });
-        return tx.eventTemplate.update({
+        await tx.eventTemplateGroup.deleteMany({ where: { templateId: existing.id } });
+        await tx.eventTemplate.update({
           where: { id: existing.id },
-          data: {
-            name,
-            slots: {
-              create: slots.map((slot, index) => ({
-                category: slot.category,
-                assignmentGroup: slot.assignmentGroup,
-                label: slot.label,
-                capacity: slot.capacity,
-                sortOrder: index,
-              })),
-            },
-          },
-          include: templateInclude,
+          data: { name, ...lootSettingsData(body) },
         });
+        await writeTemplateGroups(tx, existing.id, groups);
+        return tx.eventTemplate.findUniqueOrThrow({ where: { id: existing.id }, include: templateInclude });
       });
 
       json(response, 200, { template });
@@ -434,6 +511,7 @@ export const handleApiRequest = async (
         },
         orderBy: { createdAt: "desc" },
         include: {
+          groups: { orderBy: { sortOrder: "asc" } },
           slots: { include: { assignments: true } },
           raffles: { include: { items: true } },
         },
@@ -451,16 +529,39 @@ export const handleApiRequest = async (
 
     if (request.method === "POST" && url.pathname === "/api/events") {
       const startedAt = Date.now();
-      const body = await readJsonBody<{
+      const body: {
         name?: string;
         description?: string;
         logoUrl?: string;
         startsAt?: string;
         lootDurationHours?: number;
+        resourceLootPolicy?: string;
+        resourceInstructions?: string;
+        lootInstructions?: string;
+        lootAwardMethod?: string;
+        lootRepeatWinnerMode?: string;
         preset?: SlotPresetName | "custom";
         customSlots?: string;
+        groups?: unknown;
+        extraCrewCapacity?: number;
         guildId?: string;
-      }>(request).catch(() => ({}) as any);
+      } = await readJsonBody<{
+        name?: string;
+        description?: string;
+        logoUrl?: string;
+        startsAt?: string;
+        lootDurationHours?: number;
+        resourceLootPolicy?: string;
+        resourceInstructions?: string;
+        lootInstructions?: string;
+        lootAwardMethod?: string;
+        lootRepeatWinnerMode?: string;
+        preset?: SlotPresetName | "custom";
+        customSlots?: string;
+        groups?: unknown;
+        extraCrewCapacity?: number;
+        guildId?: string;
+      }>(request).catch(() => ({}));
 
       if (!body || !body.name || !body.name.trim()) {
         json(response, 400, { error: "Event name is required." });
@@ -489,6 +590,26 @@ export const handleApiRequest = async (
         return true;
       }
 
+      let startsAt: Date | undefined;
+      try {
+        startsAt = parseEventStart(body.startsAt);
+      } catch (error) {
+        json(response, 400, {
+          error: error instanceof Error ? error.message : "Invalid event start time.",
+        });
+        return true;
+      }
+
+      let groups: ActivityGroupSeed[] | undefined;
+      if (body.groups) {
+        try {
+          groups = normalizeActivityGroups(body.groups);
+        } catch (error) {
+          json(response, 400, { error: error instanceof Error ? error.message : "Invalid event groups." });
+          return true;
+        }
+      }
+
       const event = await createEvent({
         guildId,
         createdById: user.id,
@@ -496,10 +617,17 @@ export const handleApiRequest = async (
         name: body.name.trim(),
         description: body.description?.trim() || undefined,
         logoUrl: body.logoUrl?.trim() || undefined,
-        startsAt: parseDate(body.startsAt),
+        startsAt,
         lootDurationHours: body.lootDurationHours === 48 ? 48 : 24,
+        resourceLootPolicy: lootSettingsData(body).resourceLootPolicy,
+        resourceInstructions: body.resourceInstructions?.trim() || undefined,
+        lootInstructions: body.lootInstructions?.trim() || undefined,
+        lootAwardMethod: lootSettingsData(body).lootAwardMethod,
+        lootRepeatWinnerMode: lootSettingsData(body).lootRepeatWinnerMode,
         preset,
         customSlots: body.customSlots,
+        groups,
+        extraCrewCapacity: body.extraCrewCapacity,
       }).catch((error) => {
         throw new Error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`);
       });
@@ -520,10 +648,19 @@ export const handleApiRequest = async (
           startsAt: event.startsAt,
           status: event.status,
           lootDurationHours: event.lootDurationHours,
+          resourceLootPolicy: event.resourceLootPolicy,
+          resourceInstructions: event.resourceInstructions,
+          lootInstructions: event.lootInstructions,
+          lootAwardMethod: event.lootAwardMethod,
+          lootRepeatWinnerMode: event.lootRepeatWinnerMode,
+          groups: event.groups,
           slots: event.slots,
           raffles: [],
           members: [],
           isOwner: true,
+          myAssignmentGroups: [],
+          myAssignmentGroupIds: [],
+          signupConflicts: {},
         },
       );
       return true;
@@ -531,7 +668,7 @@ export const handleApiRequest = async (
 
     const eventMatch = url.pathname.match(/^\/api\/events\/([^/]+)$/);
     if (request.method === "GET" && eventMatch) {
-      const event = await eventDetails(eventMatch[1], { userId: user?.id });
+      const event = await eventDetails(eventMatch[1], eventContext);
       if (!event) {
         json(response, 404, { error: "Event not found." });
         return true;
@@ -565,7 +702,7 @@ export const handleApiRequest = async (
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(event.id, { userId: user.id }),
+        await eventDetails(event.id, eventContext),
       );
       return true;
     }
@@ -585,84 +722,20 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const slot = await prisma.crewSlot.findUnique({
-        where: { id: joinSlotMatch[2] },
-        include: { event: true },
+      const assigned = await assignUserToSlot({
+        slotId: joinSlotMatch[2],
+        expectedEventId: joinSlotMatch[1],
+        expectedGuildId: activeGuildId,
+        discordUserId: user.id,
+        discordTag: activeGuildProfileName,
       });
 
-      if (!slot || slot.eventId !== joinSlotMatch[1] || slot.event.status !== "OPEN") {
-        json(response, 400, { error: "That signup slot is no longer open." });
-        return true;
-      }
-
-      if (activeGuildId && slot.event.guildId !== activeGuildId) {
-        json(response, 403, { error: "That event is not in your active server." });
-        return true;
-      }
-
-      if (slot.assignmentGroup === "extra") {
-        const regularSlots = await prisma.crewSlot.findMany({
-          where: {
-            eventId: slot.eventId,
-            assignmentGroup: { not: "extra" },
-          },
-          include: { assignments: true },
-        });
-        const regularSlotsFull =
-          regularSlots.length > 0 &&
-          regularSlots.every((regularSlot) => regularSlot.assignments.length >= regularSlot.capacity);
-
-        if (!regularSlotsFull) {
-          json(response, 400, { error: "Extra crew opens after the listed roles are full." });
-          return true;
-        }
-      }
-
-      await prisma.$transaction(async (tx) => {
-        if (slot.assignmentGroup !== "extra") {
-          const extraAssignment = await tx.crewAssignment.findFirst({
-            where: {
-              eventId: slot.eventId,
-              discordUserId: user.id,
-              assignmentGroup: "extra",
-            },
-          });
-
-          if (extraAssignment) {
-            throw new Error("Extra crew members can only stay in the extra crew area.");
-          }
-        }
-
-        await tx.crewAssignment.deleteMany({
-          where: {
-            eventId: slot.eventId,
-            discordUserId: user.id,
-            assignmentGroup: slot.assignmentGroup === "extra" ? undefined : slot.assignmentGroup,
-          },
-        });
-
-        const taken = await tx.crewAssignment.count({ where: { crewSlotId: slot.id } });
-        if (taken >= slot.capacity) {
-          throw new Error("That slot filled up just before you clicked it.");
-        }
-
-        await tx.crewAssignment.create({
-          data: {
-            eventId: slot.eventId,
-            crewSlotId: slot.id,
-            assignmentGroup: slot.assignmentGroup,
-            discordUserId: user.id,
-            discordTag: activeGuildProfileName,
-          },
-        });
-      });
-
-      await publishEventPanel(slot.eventId);
+      await publishEventPanel(assigned.eventId);
 
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(slot.eventId, { userId: user.id }),
+        await eventDetails(assigned.eventId, eventContext),
       );
       return true;
     }
@@ -688,8 +761,42 @@ export const handleApiRequest = async (
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(leaveGroupMatch[1], { userId: user.id }),
+        await eventDetails(leaveGroupMatch[1], eventContext),
       );
+      return true;
+    }
+
+    const leaveActivityGroupMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/groups\/([^/]+)\/leave$/);
+    if (request.method === "POST" && leaveActivityGroupMatch) {
+      await readJsonBody<Record<string, never>>(request).catch(() => ({}));
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      const group = await prisma.eventGroup.findUnique({
+        where: { id: leaveActivityGroupMatch[2] },
+        include: { event: true },
+      });
+      if (!group || group.eventId !== leaveActivityGroupMatch[1]) {
+        json(response, 404, { error: "Activity group not found." });
+        return true;
+      }
+      if (activeGuildId && group.event.guildId !== activeGuildId) {
+        json(response, 403, { error: "That event is not in your active server." });
+        return true;
+      }
+
+      await prisma.crewAssignment.deleteMany({
+        where: {
+          eventId: group.eventId,
+          discordUserId: user.id,
+          crewSlot: { groupId: group.id },
+        },
+      });
+
+      await publishEventPanel(group.eventId);
+      jsonAndNotifyEventsChanged(response, 200, await eventDetails(group.eventId, eventContext));
       return true;
     }
 
@@ -713,7 +820,7 @@ export const handleApiRequest = async (
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(leaveEventMatch[1], { userId: user.id }),
+        await eventDetails(leaveEventMatch[1], eventContext),
       );
       return true;
     }
@@ -726,7 +833,10 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const event = await prisma.event.findUnique({ where: { id: drawLootMatch[1] } });
+      const event = await prisma.event.findUnique({
+        where: { id: drawLootMatch[1] },
+        include: { raffles: { orderBy: { createdAt: "asc" }, take: 1 } },
+      });
       if (!event) {
         json(response, 404, { error: "Event not found." });
         return true;
@@ -734,6 +844,11 @@ export const handleApiRequest = async (
 
       if (event.createdById !== user.id) {
         json(response, 403, { error: "Only the event owner can roll this loot pool." });
+        return true;
+      }
+
+      if (event.raffles[0]?.status === "DRAWN") {
+        json(response, 409, { error: "This loot pool has already been drawn." });
         return true;
       }
 
@@ -748,14 +863,14 @@ export const handleApiRequest = async (
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(event.id, { userId: user.id }),
+        await eventDetails(event.id, eventContext),
       );
       return true;
     }
 
     const addLootMatch = url.pathname.match(/^\/api\/events\/([^/]+)\/loot\/items$/);
     if (request.method === "POST" && addLootMatch) {
-      const body = await readJsonBody<{ items?: string[] | string }>(request);
+      const body = await readJsonBody<{ items?: unknown }>(request);
       if (!user) {
         json(response, 401, { error: "Discord login is required." });
         return true;
@@ -768,9 +883,30 @@ export const handleApiRequest = async (
         return true;
       }
 
-      const items = parseItems(body.items);
+      let items;
+      try {
+        items = parseItems(body.items);
+      } catch (error) {
+        json(response, 400, { error: error instanceof Error ? error.message : "Invalid loot item." });
+        return true;
+      }
       if (!items.length) {
         json(response, 400, { error: "At least one loot item is required." });
+        return true;
+      }
+
+      const lootEvent = await prisma.event.findUnique({
+        where: { id: addLootMatch[1] },
+        include: { raffles: { orderBy: { createdAt: "asc" }, take: 1 } },
+      });
+      const activeRaffle = lootEvent?.raffles[0];
+      if (!lootEvent || !activeRaffle) {
+        json(response, 404, { error: "Loot pool not found." });
+        return true;
+      }
+
+      if (activeRaffle.status === "DRAWN") {
+        json(response, 409, { error: "This loot pool has already been drawn. No more items can be added." });
         return true;
       }
 
@@ -800,7 +936,7 @@ export const handleApiRequest = async (
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(addLootMatch[1], { userId: user.id }),
+        await eventDetails(addLootMatch[1], eventContext),
       );
       return true;
     }
@@ -868,12 +1004,50 @@ export const handleApiRequest = async (
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(item.eventId, { userId: user.id }),
+        await eventDetails(item.eventId, eventContext),
       );
       return true;
     }
 
     const deleteLootMatch = url.pathname.match(/^\/api\/loot\/items\/([^/]+)$/);
+    if (request.method === "PUT" && deleteLootMatch) {
+      const body = await readJsonBody<unknown>(request);
+      if (!user) {
+        json(response, 401, { error: "Discord login is required." });
+        return true;
+      }
+
+      const item = await prisma.lootItem.findUnique({
+        where: { id: deleteLootMatch[1] },
+        include: { raffle: { include: { event: true } } },
+      });
+      if (!item) {
+        json(response, 404, { error: "Loot item not found." });
+        return true;
+      }
+      if (item.raffle.status !== "OPEN") {
+        json(response, 409, { error: "Loot items cannot be edited after the pool is drawn." });
+        return true;
+      }
+
+      const isOwner = item.raffle.event.createdById === user.id;
+      if (!isOwner && item.addedById !== user.id) {
+        json(response, 403, { error: "Only the item creator or event owner can edit this loot item." });
+        return true;
+      }
+
+      let normalized;
+      try {
+        normalized = normalizeLootItem(body);
+      } catch (error) {
+        json(response, 400, { error: error instanceof Error ? error.message : "Invalid loot item." });
+        return true;
+      }
+      await updateLootItem(item.id, user.id, normalized);
+      await publishLootPanel(item.eventId);
+      jsonAndNotifyEventsChanged(response, 200, await eventDetails(item.eventId, eventContext));
+      return true;
+    }
     if (request.method === "DELETE" && deleteLootMatch) {
       await readJsonBody<Record<string, never>>(request).catch(() => ({}));
       if (!user) {
@@ -890,6 +1064,11 @@ export const handleApiRequest = async (
         return true;
       }
 
+      if (item.raffle.status !== "OPEN") {
+        json(response, 409, { error: "Loot items cannot be deleted after the pool is drawn." });
+        return true;
+      }
+
       const isOwner = item.raffle.event.createdById === user.id;
       if (!isOwner && item.addedById !== user.id) {
         json(response, 403, { error: "Only the item creator or event owner can delete this loot item." });
@@ -902,7 +1081,7 @@ export const handleApiRequest = async (
       jsonAndNotifyEventsChanged(
         response,
         200,
-        await eventDetails(item.eventId, { userId: user.id }),
+        await eventDetails(item.eventId, eventContext),
       );
       return true;
     }

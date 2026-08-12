@@ -52,6 +52,16 @@ Loot commands:
 /loot draw event_id
 ```
 
+Simple `/loot add` entries remain comma-separated, for example `FS-9 LMG, Heavy Armor`. Complex entries use semicolon-separated rows with pipe-separated fields:
+
+```text
+category|name|quantity|quality|unit
+resource|Quantanium|10|85|boxes
+weapon|FS-9 LMG|2
+```
+
+Supported categories are `resource`, `weapon`, `armor`, `component`, `consumable`, and `other`. Award behavior always comes from the event settings chosen by the event creator.
+
 For custom event slots, use this format:
 
 ```text

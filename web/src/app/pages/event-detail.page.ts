@@ -6,14 +6,15 @@ import {
   IonBadge,
   IonButton,
   IonContent,
-  IonInput,
   IonItem,
   IonLabel,
   IonList,
   IonSpinner,
 } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
-import { ApiService, type EventDetails, type LootItem } from "../services/api.service";
+import { SiteFooterComponent } from "../components/site-footer.component";
+import { ApiService, type EventDetails, type EventGroupSummary, type LootItem, type LootItemInput } from "../services/api.service";
+import { browserTimeZoneLabel } from "../utils/event-time";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
 
@@ -25,10 +26,10 @@ type AssignmentGroup = "ship" | "ground" | "extra";
     DatePipe,
     FormsModule,
     AppMenuComponent,
+    SiteFooterComponent,
     IonBadge,
     IonButton,
     IonContent,
-    IonInput,
     IonItem,
     IonLabel,
     IonList,
@@ -38,6 +39,7 @@ type AssignmentGroup = "ship" | "ground" | "extra";
   styleUrls: ["./event-detail.page.scss"],
 })
 export class EventDetailPage implements OnInit, OnDestroy {
+  readonly timeZoneLabel = browserTimeZoneLabel();
   @Input() id = "";
   groups: AssignmentGroup[] = ["ship", "ground", "extra"];
   backLabel = "Back to Active Events";
@@ -46,9 +48,12 @@ export class EventDetailPage implements OnInit, OnDestroy {
   event?: EventDetails;
   error = "";
   lootError = "";
-  newItems = "";
+  lootDraft: LootItemInput = this.emptyLootDraft();
+  editingLootItemId = "";
   lootOpen = false;
   busyAction = "";
+  expandedGroups = new Set<string>();
+  expandedShips = new Set<string>();
   private stream?: EventSource;
 
   constructor(
@@ -83,6 +88,65 @@ export class EventDetailPage implements OnInit, OnDestroy {
     return `${this.event?.participantsWithBidCount ?? 0}/${this.event?.participantCount ?? 0}`;
   }
 
+  categoryLabel(category: LootItem["category"]) {
+    return ({ RESOURCE: "Resource or material", WEAPON: "Weapon", ARMOR: "Armor", COMPONENT: "Component or equipment", CONSUMABLE: "Consumable", OTHER: "Other" })[category];
+  }
+
+  quantityWarning(item: Pick<LootItemInput, "category" | "quantity">) {
+    const threshold = item.category === "RESOURCE" ? 100 : 10;
+    return Number(item.quantity) > threshold ? `Unusually large quantity (${item.quantity}). Confirm this is correct.` : "";
+  }
+
+  resourceWarning(item: Pick<LootItemInput, "category">) {
+    return item.category === "RESOURCE" && this.event?.resourceLootPolicy === "NONE"
+      ? "This event asks participants not to add resources. You may still save this item."
+      : "";
+  }
+
+  qualityWarning(item: Pick<LootItemInput, "quality">) {
+    if (item.quality === null || item.quality === undefined) return "";
+    const quality = Number(item.quality);
+    return Number.isInteger(quality) && quality >= 1 && quality <= 1000 ? "" : "Quality must be a whole number from 1 through 1000.";
+  }
+
+  lootDraftInvalid() {
+    const quantity = Number(this.lootDraft.quantity);
+    return !this.lootDraft.name.trim() || !Number.isInteger(quantity) || quantity < 1 || Boolean(this.qualityWarning(this.lootDraft));
+  }
+
+  awardSummary(item: LootItem) {
+    const totals = new Map<string, { tag: string; quantity: number }>();
+    for (const award of item.awards) {
+      const current = totals.get(award.discordUserId);
+      totals.set(award.discordUserId, { tag: award.discordTag, quantity: (current?.quantity ?? 0) + award.quantity });
+    }
+    return [...totals.values()].map((award) => `${award.tag}: ${award.quantity}`).join(", ");
+  }
+
+  itemAwardDescription() {
+    const method = this.event?.lootAwardMethod;
+    if (method !== "INDIVIDUAL_UNITS") return "Entire quantity awarded to one winner";
+    const repeats = this.event?.lootRepeatWinnerMode;
+    return repeats === "ALLOW_REPEATS" ? "Units awarded separately; repeat winners allowed" : "Units awarded separately; different winners when possible";
+  }
+
+  get lootEligibilityMessage() {
+    switch (this.event?.lootEligibility) {
+      case "LOGIN_REQUIRED":
+        return "Log in with Discord to use this loot pool.";
+      case "PROFILE_UNAVAILABLE":
+        return "Select a server where the bot can read your Discord profile before adding loot or bidding.";
+      case "NOT_PARTICIPANT":
+        return "Join any role in this event before adding loot or bidding.";
+      case "POOL_DRAWN":
+        return "This loot pool has been drawn and is now closed.";
+      case "ALLOWED":
+        return "Participants can add loot before or after the event ends, until the pool is drawn.";
+      default:
+        return "Loot availability could not be determined.";
+    }
+  }
+
   loadEvent() {
     this.error = "";
     this.api.getEvent(this.id).subscribe({
@@ -99,6 +163,82 @@ export class EventDetailPage implements OnInit, OnDestroy {
 
   groupedSlots(group: AssignmentGroup) {
     return this.event?.slots.filter((slot) => slot.assignmentGroup === group) ?? [];
+  }
+
+  activityGroups(kind: "FLEET" | "GROUND") {
+    return this.event?.groups.filter((group) => group.kind === kind) ?? [];
+  }
+
+  slotsForGroup(groupId: string) {
+    return this.event?.slots.filter((slot) => slot.groupId === groupId) ?? [];
+  }
+
+  shipsForFleet(groupId: string) {
+    return [...new Set(this.slotsForGroup(groupId).map((slot) => slot.category))];
+  }
+
+  slotsForShip(groupId: string, shipName: string) {
+    return this.slotsForGroup(groupId).filter((slot) => slot.category === shipName);
+  }
+
+  groupCapacity(groupId: string) {
+    return this.slotsForGroup(groupId).reduce((total, slot) => total + slot.capacity, 0);
+  }
+
+  groupAssigned(groupId: string) {
+    return this.slotsForGroup(groupId).reduce((total, slot) => total + slot.assignments.length, 0);
+  }
+
+  shipCapacity(groupId: string, shipName: string) {
+    return this.slotsForShip(groupId, shipName).reduce((total, slot) => total + slot.capacity, 0);
+  }
+
+  shipAssigned(groupId: string, shipName: string) {
+    return this.slotsForShip(groupId, shipName).reduce((total, slot) => total + slot.assignments.length, 0);
+  }
+
+  hasMyActivityAssignment(groupId: string) {
+    return this.event?.myAssignmentGroupIds.includes(groupId) ?? false;
+  }
+
+  groupConflict(groupId: string) {
+    return this.event?.signupConflicts[groupId] ?? "";
+  }
+
+  slotConflict(slot: EventDetails["slots"][number]) {
+    return slot.groupId ? this.groupConflict(slot.groupId) : "";
+  }
+
+  toggleGroup(groupId: string) {
+    this.toggleSet(this.expandedGroups, groupId);
+  }
+
+  groupExpanded(groupId: string) {
+    return this.expandedGroups.has(groupId);
+  }
+
+  shipKey(groupId: string, shipName: string) {
+    return `${groupId}:${shipName}`;
+  }
+
+  toggleShip(groupId: string, shipName: string) {
+    this.toggleSet(this.expandedShips, this.shipKey(groupId, shipName));
+  }
+
+  shipExpanded(groupId: string, shipName: string) {
+    return this.expandedShips.has(this.shipKey(groupId, shipName));
+  }
+
+  scheduleDescription(group: EventGroupSummary) {
+    if (group.scheduleMode === "EVENT_START") return "At event start";
+    if (group.scheduleMode === "SPECIFIC_TIME" && group.startsAt) {
+      return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(group.startsAt));
+    }
+    if (group.scheduleMode === "AFTER_GROUP") {
+      const predecessor = this.event?.groups.find((candidate) => candidate.id === group.predecessorGroupId);
+      return predecessor ? `After ${predecessor.name}` : "After another group";
+    }
+    return group.timingNote || "As directed";
   }
 
   groupTitle(group: AssignmentGroup) {
@@ -171,16 +311,23 @@ export class EventDetailPage implements OnInit, OnDestroy {
     this.runEventAction(`leave-${group}`, this.api.leaveGroup(this.id, group));
   }
 
+  leaveActivityGroup(group: EventGroupSummary) {
+    this.runEventAction(`leave-group-${group.id}`, this.api.leaveActivityGroup(this.id, group.id));
+  }
+
   endEvent() {
     this.runEventAction("end", this.api.endEvent(this.id));
   }
 
-  addLootItems() {
+  saveLootItem() {
     this.lootError = "";
-    this.api.addLootItems(this.id, this.newItems).subscribe({
+    const request = this.editingLootItemId
+      ? this.api.updateLootItem(this.id, this.editingLootItemId, this.lootDraft)
+      : this.api.addLootItems(this.id, [this.lootDraft]);
+    request.subscribe({
       next: (event) => {
         this.event = event;
-        this.newItems = "";
+        this.cancelLootEdit();
         this.changeDetector.detectChanges();
       },
       error: (error) => {
@@ -247,5 +394,27 @@ export class EventDetailPage implements OnInit, OnDestroy {
         this.changeDetector.detectChanges();
       },
     });
+  }
+
+  editLootItem(item: LootItem) {
+    this.editingLootItemId = item.id;
+    this.lootDraft = {
+      name: item.name, category: item.category, quantity: item.quantity, quality: item.quality,
+      unit: item.unit,
+    };
+  }
+
+  cancelLootEdit() {
+    this.editingLootItemId = "";
+    this.lootDraft = this.emptyLootDraft();
+  }
+
+  private emptyLootDraft(): LootItemInput {
+    return { name: "", category: "OTHER", quantity: 1, quality: null, unit: null };
+  }
+
+  private toggleSet(set: Set<string>, key: string) {
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
   }
 }

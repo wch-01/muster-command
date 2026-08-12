@@ -1,0 +1,22 @@
+<main class="login-page">
+  <button class="theme-toggle login-theme-toggle" type="button" (click)="toggleTheme()" [attr.aria-label]="isDarkMode ? 'Use light mode' : 'Use dark mode'" [attr.title]="isDarkMode ? 'Use light mode' : 'Use dark mode'"><span aria-hidden="true">{{ isDarkMode ? "☀" : "☾" }}</span></button>
+  <section class="login-card">
+    <img class="login-logo" src="assets/branding/muster-command-logo.svg" alt="Muster Command" />
+    <div class="login-copy">
+      <h1>Welcome to Muster Command</h1>
+      <ng-container *ngIf="user; else signedOut">
+        <p>You are logged in as <strong>{{ displayName }}</strong>.</p>
+        <div class="login-actions"><a class="login-button" [href]="destination">Continue</a><a class="login-button secondary" href="/logout">Log out</a></div>
+      </ng-container>
+      <ng-template #signedOut>
+        <ng-container *ngIf="configured; else notConfigured">
+          <p>Coordinate fleets, ground teams, event assignments, and loot with your Discord community.</p>
+          <a class="login-button discord" [href]="loginUrl">Continue with Discord</a>
+          <p class="privacy-note">Discord is used to identify your account and the servers you share with Muster Command.</p>
+        </ng-container>
+        <ng-template #notConfigured><p class="configuration-notice">Discord login is not configured yet. Add <code>APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code> to the environment file next to <code>compose.yml</code>.</p></ng-template>
+      </ng-template>
+    </div>
+  </section>
+  <p class="login-byline">A Web Craft House Games project</p>
+</main>

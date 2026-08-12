@@ -31,10 +31,16 @@ model Event {
   startsAt        DateTime?
   endedAt         DateTime?
   lootDurationHours Int           @default(24)
+  resourceLootPolicy String       @default("ANY")
+  resourceInstructions String?
+  lootInstructions String?
+  lootAwardMethod String          @default("FULL_QUANTITY")
+  lootRepeatWinnerMode String     @default("DIFFERENT_WINNERS")
   status          EventStatus      @default(OPEN)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   slots           CrewSlot[]
+  groups          EventGroup[]
   assignments     CrewAssignment[]
   raffles         LootRaffle[]
 
@@ -48,10 +54,17 @@ model EventTemplate {
   createdByName String
   name          String
   description   String?
+  lootDurationHours Int             @default(24)
+  resourceLootPolicy String         @default("ANY")
+  resourceInstructions String?
+  lootInstructions String?
+  lootAwardMethod String            @default("FULL_QUANTITY")
+  lootRepeatWinnerMode String       @default("DIFFERENT_WINNERS")
   isDefault     Boolean             @default(false)
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   slots         EventTemplateSlot[]
+  groups        EventTemplateGroup[]
 
   @@unique([guildId, name])
   @@index([guildId])
@@ -60,43 +73,91 @@ model EventTemplate {
 model EventTemplateSlot {
   id              String        @id @default(uuid())
   templateId      String
+  groupId         String?
   category        String
   assignmentGroup String        @default("ship")
   label           String
   capacity        Int
   sortOrder       Int
   template        EventTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  group           EventTemplateGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([templateId, sortOrder])
+  @@index([groupId])
+}
+
+model EventTemplateGroup {
+  id                 String               @id @default(uuid())
+  templateId         String
+  kind               String
+  name               String
+  scheduleMode       String               @default("AS_DIRECTED")
+  startsAt           DateTime?
+  timingNote         String?
+  predecessorGroupId String?
+  sortOrder          Int
+  template           EventTemplate        @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  predecessor        EventTemplateGroup?   @relation("TemplateGroupDependency", fields: [predecessorGroupId], references: [id], onDelete: SetNull)
+  dependents         EventTemplateGroup[]  @relation("TemplateGroupDependency")
+  slots              EventTemplateSlot[]
+
+  @@index([templateId, sortOrder])
+  @@index([predecessorGroupId])
+}
+
+model EventGroup {
+  id                 String       @id @default(uuid())
+  eventId            String
+  kind               String
+  name               String
+  scheduleMode       String       @default("AS_DIRECTED")
+  startsAt           DateTime?
+  timingNote         String?
+  predecessorGroupId String?
+  sortOrder          Int
+  event              Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  predecessor        EventGroup?   @relation("EventGroupDependency", fields: [predecessorGroupId], references: [id], onDelete: SetNull)
+  dependents         EventGroup[]  @relation("EventGroupDependency")
+  slots              CrewSlot[]
+  assignments        CrewAssignment[]
+
+  @@index([eventId, sortOrder])
+  @@index([predecessorGroupId])
 }
 
 model CrewSlot {
   id          String           @id @default(uuid())
   eventId     String
+  groupId     String?
   category    String
   assignmentGroup String       @default("ship")
   label       String
   capacity    Int
   sortOrder   Int
   event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  group       EventGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
   assignments CrewAssignment[]
 
   @@index([eventId, sortOrder])
+  @@index([groupId])
 }
 
 model CrewAssignment {
   id             String   @id @default(uuid())
   eventId        String
   crewSlotId     String
+  groupId        String?
   assignmentGroup String
   discordUserId  String
   discordTag     String
   createdAt      DateTime @default(now())
   event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   crewSlot       CrewSlot @relation(fields: [crewSlotId], references: [id], onDelete: Cascade)
+  group          EventGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  @@unique([eventId, discordUserId, assignmentGroup])
+  @@unique([eventId, discordUserId, groupId])
   @@index([crewSlotId])
+  @@index([groupId])
 }
 
 model LootRaffle {
@@ -107,6 +168,7 @@ model LootRaffle {
   name        String
   endsAt      DateTime?
   status      RaffleStatus @default(OPEN)
+  automaticDrawEnabled Boolean @default(true)
   createdById String
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -121,16 +183,31 @@ model LootItem {
   eventId        String
   lootRaffleId   String
   name           String
+  category       String    @default("OTHER")
+  quantity       Int       @default(1)
+  quality        Int?
+  unit           String?
   addedById      String
   addedByName    String
-  winnerUserId   String?
-  winnerTag      String?
   sortOrder      Int
   raffle         LootRaffle @relation(fields: [lootRaffleId], references: [id], onDelete: Cascade)
   bids           LootBid[]
+  awards         LootAward[]
 
   @@index([eventId])
   @@index([lootRaffleId, sortOrder])
+}
+
+model LootAward {
+  id            String   @id @default(uuid())
+  lootItemId    String
+  discordUserId String
+  discordTag    String
+  quantity      Int
+  createdAt     DateTime @default(now())
+  item          LootItem @relation(fields: [lootItemId], references: [id], onDelete: Cascade)
+
+  @@index([lootItemId])
 }
 
 model LootBid {

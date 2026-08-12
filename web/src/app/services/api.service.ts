@@ -20,11 +20,15 @@ export type LootItem = {
   name: string;
   addedById: string;
   addedByName: string;
-  winnerUserId: string | null;
-  winnerTag: string | null;
+  category: LootCategory;
+  quantity: number;
+  quality: number | null;
+  unit: string | null;
+  awards: Array<{ id: string; discordUserId: string; discordTag: string; quantity: number }>;
   bidCount: number;
   hasMyBid: boolean;
   canDelete: boolean;
+  canEdit: boolean;
   bids: LootBid[];
 };
 
@@ -46,8 +50,15 @@ export type EventSummary = {
   startsAt: string | null;
   status: "OPEN" | "CLOSED";
   lootDurationHours: number;
+  resourceLootPolicy: ResourceLootPolicy;
+  resourceInstructions: string | null;
+  lootInstructions: string | null;
+  lootAwardMethod: AwardMethod;
+  lootRepeatWinnerMode: RepeatWinnerMode;
+  groups: EventGroupSummary[];
   slots: Array<{
     id: string;
+    groupId: string | null;
     category: string;
     assignmentGroup: "ship" | "ground" | "extra";
     label: string;
@@ -61,10 +72,53 @@ export type EventDetails = EventSummary & {
   isOwner: boolean;
   members: EventMember[];
   myAssignmentGroups: Array<"ship" | "ground" | "extra">;
+  myAssignmentGroupIds: string[];
+  signupConflicts: Record<string, string>;
   raffles: LootRaffle[];
   participantCount: number;
   participantsWithBidCount: number;
   canAddLoot: boolean;
+  lootEligibility: "ALLOWED" | "LOGIN_REQUIRED" | "PROFILE_UNAVAILABLE" | "NOT_PARTICIPANT" | "POOL_DRAWN";
+};
+
+export type LootCategory = "RESOURCE" | "WEAPON" | "ARMOR" | "COMPONENT" | "CONSUMABLE" | "OTHER";
+export type AwardMethod = "FULL_QUANTITY" | "INDIVIDUAL_UNITS";
+export type RepeatWinnerMode = "ALLOW_REPEATS" | "DIFFERENT_WINNERS";
+export type ResourceLootPolicy = "ANY" | "REFINED_ONLY" | "RAW_ONLY" | "NONE" | "CUSTOM";
+export type LootItemInput = {
+  name: string;
+  category: LootCategory;
+  quantity: number;
+  quality: number | null;
+  unit: string | null;
+};
+
+export type ScheduleMode = "EVENT_START" | "SPECIFIC_TIME" | "AFTER_GROUP" | "AS_DIRECTED";
+
+export type EventGroupSummary = {
+  id: string;
+  kind: "FLEET" | "GROUND";
+  name: string;
+  scheduleMode: ScheduleMode;
+  startsAt: string | null;
+  timingNote: string | null;
+  predecessorGroupId: string | null;
+  sortOrder: number;
+};
+
+export type ActivityGroupInput = {
+  clientId: string;
+  kind: "FLEET" | "GROUND";
+  name: string;
+  scheduleMode: ScheduleMode;
+  startsAt?: string;
+  timingNote?: string;
+  predecessorClientId?: string;
+  ships?: Array<{
+    name: string;
+    roles: Array<{ label: string; capacity: number }>;
+  }>;
+  roles?: Array<{ label: string; capacity: number }>;
 };
 
 export type CreatedEventDetails = EventDetails;
@@ -75,12 +129,20 @@ export type CreateEventInput = {
   logoUrl?: string;
   startsAt?: string;
   lootDurationHours: number;
+  resourceLootPolicy: ResourceLootPolicy;
+  resourceInstructions?: string;
+  lootInstructions?: string;
+  lootAwardMethod: AwardMethod;
+  lootRepeatWinnerMode: RepeatWinnerMode;
   preset: string;
   customSlots?: string;
+  groups?: ActivityGroupInput[];
+  extraCrewCapacity?: number;
 };
 
 export type TemplateSlot = {
   id: string;
+  groupId: string | null;
   category: string;
   assignmentGroup: "ship" | "ground";
   label: string;
@@ -96,12 +158,35 @@ export type EventTemplateSummary = {
   name: string;
   description: string | null;
   isDefault: boolean;
+  lootDurationHours: number;
+  resourceLootPolicy: ResourceLootPolicy;
+  resourceInstructions: string | null;
+  lootInstructions: string | null;
+  lootAwardMethod: AwardMethod;
+  lootRepeatWinnerMode: RepeatWinnerMode;
   slots: TemplateSlot[];
+  groups: Array<{
+    id: string;
+    kind: "FLEET" | "GROUND";
+    name: string;
+    scheduleMode: ScheduleMode;
+    startsAt: string | null;
+    timingNote: string | null;
+    predecessorGroupId: string | null;
+    sortOrder: number;
+  }>;
 };
 
 export type SaveTemplateInput = {
   name: string;
-  slots: Array<{
+  lootDurationHours: number;
+  resourceLootPolicy: ResourceLootPolicy;
+  resourceInstructions?: string;
+  lootInstructions?: string;
+  lootAwardMethod: AwardMethod;
+  lootRepeatWinnerMode: RepeatWinnerMode;
+  groups?: ActivityGroupInput[];
+  slots?: Array<{
     category: string;
     assignmentGroup: "ship" | "ground";
     label: string;
@@ -163,6 +248,33 @@ export type ServerProfile = {
   avatar?: string;
 };
 
+export type AdminSettings = {
+  discordEventPublishingEnabled: boolean;
+  eventOutputMode: "channel" | "thread";
+  eventOutputChannelId: string;
+  lootOutputChannelId: string;
+  threadAutoDeleteDays: number;
+  templateControlUserIds: string[];
+  templateControlRoleIds: string[];
+};
+
+export type AdminData = {
+  settings: AdminSettings;
+  permissions: {
+    roles: Array<{ id: string; name: string }>;
+    users: Array<{ id: string; name: string; username: string }>;
+    userListAvailable: boolean;
+  };
+  inviteUrl?: string;
+};
+
+export type SystemAdminData = {
+  configured: boolean;
+  loginConfigured: boolean;
+  status: { configured: boolean; connected: boolean; userTag?: string; userId?: string; guildCount: number; uptimeSeconds?: number };
+  installedServers: Array<{ id: string; name: string; iconUrl?: string }>;
+};
+
 @Injectable({ providedIn: "root" })
 export class ApiService {
   constructor(private readonly http: HttpClient) {}
@@ -211,7 +323,7 @@ export class ApiService {
     return this.http.delete<{ ok: boolean }>(`/api/templates/${id}`);
   }
 
-  addLootItems(eventId: string, items: string) {
+  addLootItems(eventId: string, items: LootItemInput[]) {
     return this.http.post<EventDetails>(`/api/events/${eventId}/loot/items`, {
       items,
     });
@@ -245,6 +357,21 @@ export class ApiService {
 
   leaveGroup(eventId: string, group: "ship" | "ground") {
     return this.http.post<EventDetails>(`/api/events/${eventId}/leave/${group}`, {});
+  }
+
+  getAdmin() { return this.http.get<AdminData>("/api/admin"); }
+  saveAdmin(settings: AdminSettings) { return this.http.put<{ ok: boolean }>("/api/admin", settings); }
+  getSystemAdmin() { return this.http.get<SystemAdminData>("/api/system-admin"); }
+  registerGuildCommands() { return this.http.post<{ message: string }>("/api/system-admin/register-guild", {}); }
+  registerGlobalCommands() { return this.http.post<{ message: string }>("/api/system-admin/register-global", {}); }
+  getBotCommands() { return this.http.get<{ html: string }>("/api/bot-commands"); }
+
+  updateLootItem(eventId: string, itemId: string, item: LootItemInput) {
+    return this.http.put<EventDetails>(`/api/loot/items/${itemId}`, item);
+  }
+
+  leaveActivityGroup(eventId: string, groupId: string) {
+    return this.http.post<EventDetails>(`/api/events/${eventId}/groups/${groupId}/leave`, {});
   }
 
   toggleLootBid(eventId: string, itemId: string) {

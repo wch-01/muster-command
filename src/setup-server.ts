@@ -22,9 +22,9 @@ import {
   isAdminUser,
   isLoginConfigured,
   logout,
-  renderLoginPage,
   requireAuthenticatedApiUser,
   requireAuthenticatedUser,
+  safeReturnTo,
   setActiveGuild,
   type AuthenticatedUser,
 } from "./auth.js";
@@ -71,6 +71,8 @@ const serveWebApp = async (
   url: URL,
   response: import("node:http").ServerResponse,
   sessionData?: unknown,
+  loginData?: unknown,
+  fallbackToIndex = true,
 ) => {
   if (url.pathname !== "/app" && !url.pathname.startsWith("/app/")) {
     return false;
@@ -86,15 +88,21 @@ const serveWebApp = async (
       filePath = join(filePath, "index.html");
     }
   } catch {
+    if (!fallbackToIndex) {
+      return false;
+    }
     filePath = join(webAppRoot, "index.html");
   }
 
   const contentType = mimeTypes[extname(filePath)] ?? "application/octet-stream";
   let content = await readFile(filePath);
-  if (contentType.startsWith("text/html") && sessionData) {
+  if (contentType.startsWith("text/html") && (sessionData || loginData)) {
     const html = content.toString("utf8");
-    const script = `<script>window.__STARBOT_SESSION__=${JSON.stringify(sessionData).replaceAll("</script", "<\\/script")};</script>`;
-    content = Buffer.from(html.replace("</head>", `${script}</head>`), "utf8");
+    const script = [
+      sessionData ? `window.__STARBOT_SESSION__=${JSON.stringify(sessionData)};` : "",
+      loginData ? `window.__MUSTER_LOGIN__=${JSON.stringify(loginData)};` : "",
+    ].join("").replaceAll("</script", "<\\/script");
+    content = Buffer.from(html.replace("</head>", `<script>${script}</script></head>`), "utf8");
   }
 
   response.writeHead(200, { "content-type": contentType });
@@ -262,7 +270,27 @@ const renderTopMenu = (
   const eventActive = active === "active-events" || active === "create-event" || active === "past-events";
   const profileName = activeServer?.userProfile?.displayName ?? user?.globalName ?? user?.username;
 
-  return `<header class="top-menu">
+  return `<script>
+    (() => {
+      const saved = localStorage.getItem("muster-theme");
+      const initial = saved === "dark" || saved === "light" ? saved : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.dataset.theme = initial;
+      window.syncMusterThemeToggle = () => {
+        const dark = document.documentElement.dataset.theme === "dark";
+        document.querySelectorAll(".theme-toggle").forEach((button) => {
+          button.textContent = dark ? "☀" : "☾";
+          button.setAttribute("aria-label", dark ? "Use light mode" : "Use dark mode");
+          button.setAttribute("title", dark ? "Use light mode" : "Use dark mode");
+        });
+      };
+      window.toggleMusterTheme = () => {
+        const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem("muster-theme", theme);
+        window.syncMusterThemeToggle();
+      };
+    })();
+  </script><header class="top-menu">
     <a class="brand" href="/app/dashboard">Muster Command</a>
     ${envConfig.STATE === "development" ? `<span class="env-badge">Dev</span>` : ""}
     <nav aria-label="Primary navigation">
@@ -289,10 +317,42 @@ const renderTopMenu = (
                 </select>
               </form>`}
         ${profileName ? `<span>${escapeHtml(profileName)}</span>` : ""}
+      <button class="theme-toggle" type="button" onclick="window.toggleMusterTheme()" aria-label="Use dark mode" title="Use dark mode">☾</button>
       <a href="/logout">Log out</a>
     </div>
-  </header>`;
+  </header><script>window.syncMusterThemeToggle();</script>`;
 };
+
+const sendJson = (response: import("node:http").ServerResponse, status: number, value: unknown) => {
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(value));
+};
+
+const readJsonBody = async <T>(request: import("node:http").IncomingMessage) => {
+  const raw = await readRequestBody(request);
+  return (raw ? JSON.parse(raw) : {}) as T;
+};
+
+type AdminSettingsInput = {
+  discordEventPublishingEnabled?: boolean;
+  eventOutputMode?: "channel" | "thread";
+  eventOutputChannelId?: string;
+  lootOutputChannelId?: string;
+  threadAutoDeleteDays?: number;
+  templateControlUserIds?: unknown[];
+  templateControlRoleIds?: unknown[];
+};
+
+const renderSiteFooter = () => `<footer class="site-footer">
+    <div class="site-footer-content">
+      <span><strong>Muster Command</strong> · Website by <a href="https://webcrafthouse.com/" target="_blank" rel="noopener noreferrer">Web Craft House Games</a></span>
+      <div class="site-footer-contact">
+        <span>Contact: <a href="mailto:contact@webcrafthouse.com">contact@webcrafthouse.com</a></span>
+        <span>Support: <a href="https://webcrafthouse.com/contact/" target="_blank" rel="noopener noreferrer">Contact WCH</a></span>
+        <span><a href="https://www.subscribestar.com/webcrafthouse" target="_blank" rel="noopener noreferrer">Support the Build</a></span>
+      </div>
+    </div>
+  </footer>`;
 
 const renderPageStyles = () => `<style>
       :root {
@@ -302,6 +362,8 @@ const renderPageStyles = () => `<style>
         color: #17202a;
       }
       body {
+        display: flex;
+        flex-direction: column;
         margin: 0;
         min-height: 100vh;
         background: #f4f6f8;
@@ -384,8 +446,44 @@ const renderPageStyles = () => `<style>
       }
       .page-wrap {
         display: grid;
+        flex: 1 0 auto;
         place-items: start center;
         padding: 32px 16px 48px;
+      }
+      .site-footer {
+        align-items: center;
+        background: #ffffff;
+        border-top: 1px solid #d7dde4;
+        box-sizing: border-box;
+        color: #64748b;
+        display: flex;
+        flex: 0 0 52px;
+        min-height: 52px;
+        padding: 0 18px;
+      }
+      .site-footer-content {
+        align-items: center;
+        display: flex;
+        gap: 24px;
+        justify-content: space-between;
+        margin: 0 auto;
+        width: min(1180px, 100%);
+      }
+      .site-footer-contact {
+        display: flex;
+        gap: 18px;
+        white-space: nowrap;
+      }
+      .site-footer strong {
+        color: #334155;
+      }
+      .site-footer a {
+        color: #315f9b;
+        text-decoration: none;
+      }
+      .site-footer a:hover,
+      .site-footer a:focus-visible {
+        text-decoration: underline;
       }
       main {
         width: min(720px, 100%);
@@ -677,6 +775,58 @@ const renderPageStyles = () => `<style>
         color: #64748b;
         word-break: break-all;
       }
+      .theme-toggle {
+        align-items: center;
+        background: transparent;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        color: #334155;
+        display: inline-flex;
+        font-size: 20px;
+        height: 34px;
+        justify-content: center;
+        line-height: 1;
+        padding: 0;
+        width: 34px;
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        background: #111827;
+        color: #e5e7eb;
+      }
+      html[data-theme="dark"] body { background: #111827; color: #e5e7eb; }
+      html[data-theme="dark"] .top-menu,
+      html[data-theme="dark"] .site-footer { background: #18212f; border-color: #374151; color: #9ca3af; }
+      html[data-theme="dark"] .brand,
+      html[data-theme="dark"] nav a,
+      html[data-theme="dark"] .user-menu a,
+      html[data-theme="dark"] .server-select label,
+      html[data-theme="dark"] .site-footer strong,
+      html[data-theme="dark"] h1,
+      html[data-theme="dark"] h2,
+      html[data-theme="dark"] h3 { color: #f3f4f6; }
+      html[data-theme="dark"] main,
+      html[data-theme="dark"] .modal-panel,
+      html[data-theme="dark"] .check-list { background: #1f2937; border-color: #4b5563; color: #e5e7eb; }
+      html[data-theme="dark"] .stat,
+      html[data-theme="dark"] .server-list li { background: #273449; border-color: #4b5563; }
+      html[data-theme="dark"] input,
+      html[data-theme="dark"] select,
+      html[data-theme="dark"] textarea { background: #111827; border-color: #4b5563; color: #f3f4f6; }
+      html[data-theme="dark"] .hint,
+      html[data-theme="dark"] .muted,
+      html[data-theme="dark"] .stat strong,
+      html[data-theme="dark"] .option-row small,
+      html[data-theme="dark"] .server-list code { color: #9ca3af; }
+      html[data-theme="dark"] .notice,
+      html[data-theme="dark"] .invite,
+      html[data-theme="dark"] .panel { background: #172554; border-color: #1d4ed8; color: #dbeafe; }
+      html[data-theme="dark"] code,
+      html[data-theme="dark"] pre { background: #111827; }
+      html[data-theme="dark"] .theme-toggle { background: #273449; border-color: #64748b; color: #f3f4f6; }
+      html[data-theme="dark"] .site-footer a,
+      html[data-theme="dark"] main a,
+      html[data-theme="dark"] .link-button { color: #93c5fd; }
       @media (max-width: 720px) {
         .top-menu {
           align-items: flex-start;
@@ -686,6 +836,16 @@ const renderPageStyles = () => `<style>
         .user-menu {
           width: 100%;
           justify-content: space-between;
+        }
+        .site-footer-content {
+          font-size: 12px;
+          gap: 10px;
+        }
+        .site-footer-contact {
+          gap: 10px;
+        }
+        .site-footer-contact span:first-child {
+          display: none;
         }
       }
     </style>`;
@@ -802,6 +962,7 @@ const renderSystemAdminPage = (
       </section>
     </main>
     </div>
+    ${renderSiteFooter()}
     <script>
       const installedServersModal = document.getElementById("installedServersModal");
       const openInstalledServersModal = () => {
@@ -984,6 +1145,7 @@ const renderAdminPage = async (
         </section>
       </main>
     </div>
+    ${renderSiteFooter()}
     <script>
       const updateOutputFields = () => {
         const mode = document.getElementById("eventOutputMode")?.value;
@@ -1208,14 +1370,9 @@ export const startSetupServer = async () => {
       const settings = await loadSettings();
 
       if (request.method === "GET" && url.pathname === "/login") {
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          renderLoginPage(
-            settings,
-            getSessionUser(request),
-            url.searchParams.get("returnTo") ?? "/app/dashboard",
-          ),
-        );
+        const destination = safeReturnTo(url.searchParams.get("returnTo") ?? "/app/dashboard");
+        response.writeHead(302, { location: `/app/login?returnTo=${encodeURIComponent(destination)}` });
+        response.end();
         return;
       }
 
@@ -1311,6 +1468,75 @@ export const startSetupServer = async () => {
           return;
         }
 
+        if (request.method === "GET" && url.pathname === "/api/admin") {
+          const permissions = activeGuildId
+            ? await botGuildPermissionOptions(activeGuildId)
+            : { roles: [], users: [], userListAvailable: false };
+          sendJson(response, 200, {
+            settings: {
+              discordEventPublishingEnabled: settings.discordEventPublishingEnabled ?? false,
+              eventOutputMode: settings.eventOutputMode ?? "channel",
+              eventOutputChannelId: settings.eventOutputChannelId ?? "",
+              lootOutputChannelId: settings.lootOutputChannelId ?? "",
+              threadAutoDeleteDays: settings.threadAutoDeleteDays ?? 7,
+              templateControlUserIds: [...csvSet(settings.templateControlUserIds)],
+              templateControlRoleIds: [...idSet(settings.templateControlRoleIds)],
+            },
+            permissions,
+            inviteUrl: inviteUrl(settings.discordClientId),
+          });
+          return;
+        }
+
+        if (request.method === "PUT" && url.pathname === "/api/admin") {
+          const body = await readJsonBody<AdminSettingsInput>(request);
+          const outputMode = body.eventOutputMode === "thread" ? "thread" : "channel";
+          const cleanupDays = Number(body.threadAutoDeleteDays ?? 7);
+          await saveSettings({
+            discordEventPublishingEnabled: Boolean(body.discordEventPublishingEnabled),
+            eventOutputMode: outputMode,
+            eventOutputChannelId: body.eventOutputChannelId,
+            lootOutputChannelId: outputMode === "channel" ? body.lootOutputChannelId : undefined,
+            threadAutoDeleteDays: Number.isInteger(cleanupDays) ? Math.min(Math.max(cleanupDays, 1), 30) : 7,
+            templateControlUserIds: (body.templateControlUserIds ?? []).map(String).map((value: string) => value.trim()).filter(Boolean).join(","),
+            templateControlRoleIds: (body.templateControlRoleIds ?? []).map(String).map((value: string) => value.trim()).filter(Boolean).join(","),
+          }, settings);
+          sendJson(response, 200, { ok: true });
+          return;
+        }
+
+        if (request.method === "GET" && url.pathname === "/api/system-admin") {
+          requireAdminAccess(request, settings, user);
+          sendJson(response, 200, {
+            configured: isDiscordConfigured(settings),
+            loginConfigured: isLoginConfigured(settings),
+            status: botStatus(),
+            installedServers: botGuilds(),
+          });
+          return;
+        }
+
+        if (request.method === "POST" && url.pathname === "/api/system-admin/register-guild") {
+          requireAdminAccess(request, settings, user);
+          if (!activeGuildId) throw new Error("Select a shared server before registering commands.");
+          const scope = await registerGuildCommands(settings, activeGuildId);
+          sendJson(response, 200, { message: `Slash commands registered for ${scope}.` });
+          return;
+        }
+
+        if (request.method === "POST" && url.pathname === "/api/system-admin/register-global") {
+          requireAdminAccess(request, settings, user);
+          const scope = await registerGlobalCommands(settings);
+          sendJson(response, 200, { message: `Slash commands registered ${scope}.` });
+          return;
+        }
+
+        if (request.method === "GET" && url.pathname === "/api/bot-commands") {
+          const markdown = await readFile("./docs/slash-commands.md", "utf8");
+          sendJson(response, 200, { html: markdownToHtml(markdown) });
+          return;
+        }
+
         if (
           await handleApiRequest(
             request,
@@ -1330,6 +1556,27 @@ export const startSetupServer = async () => {
         request.method === "GET" &&
         (url.pathname === "/app" || url.pathname.startsWith("/app/"))
       ) {
+        const loginRoute = url.pathname === "/app/login";
+        const staticAsset =
+          url.pathname.startsWith("/app/assets/") ||
+          /^\/app\/(?:chunk|main|polyfills|styles)-[A-Z0-9]+\.(?:js|css)$/.test(url.pathname);
+        if (loginRoute || staticAsset) {
+          const user = getSessionUser(request);
+          const destination = safeReturnTo(url.searchParams.get("returnTo") ?? "/app/dashboard");
+          if (await serveWebApp(url, response, undefined, loginRoute ? {
+            configured: isLoginConfigured(settings),
+            destination,
+            user: user ? { username: user.username, globalName: user.globalName } : undefined,
+          } : undefined, loginRoute)) {
+            return;
+          }
+          if (staticAsset) {
+            response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+            response.end("Not found");
+            return;
+          }
+        }
+
         const user = requireAuthenticatedUser(request, response, request.url ?? "/app");
         if (!user) {
           return;
@@ -1342,91 +1589,20 @@ export const startSetupServer = async () => {
       }
 
       if (request.method === "GET" && url.pathname === "/admin") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/admin");
-        if (!user) {
-          return;
-        }
-        const { active, servers } = await activeServerForRequest(request, user);
-
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          await renderAdminPage(
-            settings,
-            user,
-            canSeeSystemAdminLink(settings, user),
-            active,
-            servers,
-          ),
-        );
+        response.writeHead(302, { location: "/app/admin" });
+        response.end();
         return;
       }
 
       if (request.method === "GET" && url.pathname === "/system-admin") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/system-admin");
-        if (!user) {
-          return;
-        }
-
-        requireAdminAccess(request, settings, user);
-        const activeInfo = await activeServerForRequest(request, user);
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          renderSystemAdminPage(
-            settings,
-            undefined,
-            user,
-            canSeeSystemAdminLink(settings, user),
-            activeInfo.active,
-            activeInfo.servers,
-          ),
-        );
+        response.writeHead(302, { location: "/app/system-admin" });
+        response.end();
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/admin/settings") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/admin");
-        if (!user) {
-          return;
-        }
-        const body = new URLSearchParams(await readRequestBody(request));
-        const cleanupDays = Number.parseInt(body.get("threadAutoDeleteDays") ?? "7", 10);
-        const outputMode = body.get("eventOutputMode") === "thread" ? "thread" : "channel";
-        const nextSettings = await saveSettings(
-          {
-            discordEventPublishingEnabled: body.get("discordEventPublishingEnabled") === "true",
-            eventOutputMode: outputMode,
-            eventOutputChannelId: body.get("eventOutputChannelId") ?? undefined,
-            lootOutputChannelId:
-              outputMode === "channel" ? (body.get("lootOutputChannelId") ?? undefined) : undefined,
-            threadAutoDeleteDays: Number.isInteger(cleanupDays)
-              ? Math.min(Math.max(cleanupDays, 1), 30)
-              : 7,
-            templateControlUserIds: body
-              .getAll("templateControlUserIds")
-              .map((value) => value.trim())
-              .filter(Boolean)
-              .join(","),
-            templateControlRoleIds: body
-              .getAll("templateControlRoleIds")
-              .map((value) => value.trim())
-              .filter(Boolean)
-              .join(","),
-          },
-          settings,
-        );
-        const { active, servers } = await activeServerForRequest(request, user);
-
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          await renderAdminPage(
-            nextSettings,
-            user,
-            canSeeSystemAdminLink(nextSettings, user),
-            active,
-            servers,
-            "Admin settings saved.",
-          ),
-        );
+        response.writeHead(303, { location: "/app/admin" });
+        response.end();
         return;
       }
 
@@ -1437,74 +1613,20 @@ export const startSetupServer = async () => {
       }
 
       if (request.method === "GET" && url.pathname === "/slash-commands") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/slash-commands");
-        if (!user) {
-          return;
-        }
-        const { active, servers } = await activeServerForRequest(request, user);
-
-        const commands = await readFile("./docs/slash-commands.md", "utf8");
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          renderCommandsPage(
-            settings,
-            user,
-            canSeeSystemAdminLink(settings, user),
-            commands,
-            active,
-            servers,
-          ),
-        );
+        response.writeHead(302, { location: "/app/bot-commands" });
+        response.end();
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/register-test") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/system-admin");
-        if (!user) {
-          return;
-        }
-
-        requireAdminAccess(request, settings, user);
-        const { active, servers } = await activeServerForRequest(request, user);
-        if (!active) {
-          throw new Error("Select a shared server before registering commands.");
-        }
-
-        const scope = await registerGuildCommands(settings, active.id);
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          renderSystemAdminPage(
-            settings,
-            `Slash commands registered for ${scope}.`,
-            user,
-            canSeeSystemAdminLink(settings, user),
-            active,
-            servers,
-          ),
-        );
+        response.writeHead(303, { location: "/app/system-admin" });
+        response.end();
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/register-global") {
-        const user = requireAuthenticatedUser(request, response, request.url ?? "/system-admin");
-        if (!user) {
-          return;
-        }
-
-        requireAdminAccess(request, settings, user);
-        const { active, servers } = await activeServerForRequest(request, user);
-        const scope = await registerGlobalCommands(settings);
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          renderSystemAdminPage(
-            settings,
-            `Slash commands registered ${scope}.`,
-            user,
-            canSeeSystemAdminLink(settings, user),
-            active,
-            servers,
-          ),
-        );
+        response.writeHead(303, { location: "/app/system-admin" });
+        response.end();
         return;
       }
 
@@ -1512,6 +1634,10 @@ export const startSetupServer = async () => {
       response.end("Not found");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong.";
+      if ((request.url ?? "").startsWith("/api/")) {
+        sendJson(response, message.includes("System Admin") ? 403 : 500, { error: message });
+        return;
+      }
       if (
         message.startsWith("System Admin requires") ||
         message.startsWith("System Admin access is only available")
@@ -1521,14 +1647,8 @@ export const startSetupServer = async () => {
         return;
       }
 
-      response.writeHead(500, { "content-type": "text/html; charset=utf-8" });
-      response.end(
-        renderSystemAdminPage(
-          await loadSettings().catch(() => ({})),
-          message,
-          getSessionUser(request),
-        ),
-      );
+      response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      response.end(message);
     }
   });
 
@@ -1537,6 +1657,6 @@ export const startSetupServer = async () => {
   });
 
   console.log(`App available at http://localhost:${envConfig.SETUP_PORT}/app`);
-  console.log(`System Admin page available at http://localhost:${envConfig.SETUP_PORT}/system-admin`);
+  console.log(`System Admin page available at http://localhost:${envConfig.SETUP_PORT}/app/system-admin`);
   return server;
 };
