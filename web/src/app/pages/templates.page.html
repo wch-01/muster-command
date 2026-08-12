@@ -63,6 +63,33 @@
         <input type="text" [(ngModel)]="draft.name" [disabled]="!editing" />
       </label>
 
+      <section class="loot-template-settings">
+        <h3>Loot settings</h3>
+        <p class="muted">Templates store loot behavior, but never actual loot items.</p>
+        <div class="builder-grid">
+          <label class="field-label">Loot claim window
+            <select [(ngModel)]="draft.lootDurationHours" [disabled]="!editing"><option [ngValue]="24">24 hours</option><option [ngValue]="48">48 hours</option></select>
+          </label>
+          <label class="field-label">Accepted resource forms
+            <select [(ngModel)]="draft.resourceLootPolicy" [disabled]="!editing">
+              <option value="ANY">Any form</option><option value="REFINED_ONLY">Refined materials only</option><option value="RAW_ONLY">Raw resources only</option><option value="NONE">No resources</option><option value="CUSTOM">Custom rules</option>
+            </select>
+          </label>
+          <label class="field-label" *ngIf="draft.resourceLootPolicy === 'CUSTOM'">Resource instructions
+            <textarea rows="3" [(ngModel)]="draft.resourceInstructions" [disabled]="!editing"></textarea>
+          </label>
+          <label class="field-label">Default quantity award
+            <select [(ngModel)]="draft.lootAwardMethod" [disabled]="!editing"><option value="FULL_QUANTITY">Full quantity to one winner</option><option value="INDIVIDUAL_UNITS">Draw each unit separately</option></select>
+          </label>
+          <label class="field-label" *ngIf="draft.lootAwardMethod === 'INDIVIDUAL_UNITS'">Repeat winners
+            <select [(ngModel)]="draft.lootRepeatWinnerMode" [disabled]="!editing"><option value="DIFFERENT_WINNERS">Different winners when possible</option><option value="ALLOW_REPEATS">Allow repeat winners</option></select>
+          </label>
+          <label class="field-label">General loot instructions
+            <textarea rows="3" [(ngModel)]="draft.lootInstructions" [disabled]="!editing"></textarea>
+          </label>
+        </div>
+      </section>
+
       <section class="crew-builder">
         <div class="builder-heading">
           <h3>Fleets</h3>

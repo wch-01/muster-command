@@ -168,6 +168,12 @@ ion-content {
   letter-spacing: 0.01em;
 }
 
+.loot-template-settings {
+  border-top: 1px solid #d8e0ec;
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
 .field-label input,
 .field-label select {
   background: #ffffff;
@@ -247,6 +253,61 @@ ion-content {
 .header-row {
   color: #64748b;
   font-size: 13px;
+}
+
+:host-context(html[data-theme="dark"]) {
+  .template-card,
+  .empty-state,
+  .builder-card,
+  .template-modal,
+  .modal-header,
+  .modal-actions {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .modal-body {
+    background: #18212f;
+  }
+
+  .ship-section {
+    background: #273449;
+    box-shadow: inset 0 1px 0 #4b5563, inset 0 -1px 0 #4b5563;
+  }
+
+  .builder-card h4,
+  .ship-section h4,
+  .builder-heading h3 {
+    color: #f3f4f6;
+  }
+
+  .field-label,
+  .header-row,
+  .field-label small,
+  .optional-label {
+    color: #aeb8c7;
+  }
+
+  .primary-action,
+  .mini-button,
+  .icon-button {
+    background: #273449;
+    border-color: #64748b;
+    color: #f3f4f6;
+  }
+
+  .primary-action,
+  .mini-button.primary {
+    background: #1d4ed8;
+    border-color: #2563eb;
+    color: #ffffff;
+  }
+
+  .mini-button.danger {
+    border-color: #b45353;
+    color: #fca5a5;
+  }
 }
 
 @media (max-width: 900px) {

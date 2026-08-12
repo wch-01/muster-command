@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Muster Command emblem</title>
+  <desc id="desc">A geometric shield containing a coordinated upward formation and rally chevron.</desc>
+  <path d="M500 70 850 272v404L500 878 150 676V272Z"
+        fill="none" stroke="#171b1c" stroke-width="48" stroke-linejoin="miter"/>
+  <path d="M228 600V440l89-69v281Z" fill="#171b1c"/>
+  <path d="M352 652V346l89-69v426Z" fill="#171b1c"/>
+  <path d="M559 703V277l89 69v306Z" fill="#171b1c"/>
+  <path d="M683 652V371l89 69v160Z" fill="#171b1c"/>
+  <circle cx="500" cy="251" r="49" fill="#ad8740"/>
+  <path d="M460 328 500 359l40-31v397l-40-26-40 26Z" fill="#ad8740"/>
+  <path d="M237 709 500 849l263-140-83-60-180 97-180-97Z" fill="#991f1f"/>
+</svg>

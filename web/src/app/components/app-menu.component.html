@@ -1,13 +1,19 @@
 <header class="top-menu">
-  <a class="brand" href="/app/dashboard">Muster Command</a>
+  <a class="brand" href="/app/dashboard" aria-label="Muster Command dashboard">
+    <img
+      class="brand-logo"
+      src="assets/branding/muster-command-logo.svg"
+      alt="Muster Command"
+    />
+  </a>
   <span class="env-badge" *ngIf="state === 'development'">Dev</span>
   <nav aria-label="Primary navigation">
     <a [class.active]="active === 'dashboard'" href="/app/dashboard">Dashboard</a>
     <a [class.active]="eventActive" href="/app/active-events">Events</a>
-    <a [class.active]="active === 'commands'" href="/slash-commands">Bot Commands</a>
+    <a [class.active]="active === 'commands'" href="/app/bot-commands">Bot Commands</a>
     <a [class.active]="active === 'templates'" href="/app/templates">Templates</a>
-    <a [class.active]="active === 'admin'" href="/admin">Admin</a>
-    <a *ngIf="isSuperAdmin" [class.active]="active === 'system-admin'" href="/system-admin">System Admin</a>
+    <a [class.active]="active === 'admin'" href="/app/admin">Admin</a>
+    <a *ngIf="isSuperAdmin" [class.active]="active === 'system-admin'" href="/app/system-admin">System Admin</a>
   </nav>
   <div class="user-menu">
     <div class="server-select">
@@ -26,6 +32,11 @@
       </select>
     </div>
     <span *ngIf="userName">{{ userName }}</span>
+    <button class="theme-toggle" type="button" (click)="toggleTheme()"
+      [attr.aria-label]="isDarkMode ? 'Use light mode' : 'Use dark mode'"
+      [attr.title]="isDarkMode ? 'Use light mode' : 'Use dark mode'">
+      <span aria-hidden="true">{{ isDarkMode ? "☀" : "☾" }}</span>
+    </button>
     <a href="/logout">Log out</a>
   </div>
 </header>

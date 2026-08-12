@@ -37,6 +37,11 @@ export const createEvent = async (input: {
   logoUrl?: string;
   startsAt?: Date;
   lootDurationHours: number;
+  resourceLootPolicy?: string;
+  resourceInstructions?: string;
+  lootInstructions?: string;
+  lootAwardMethod?: string;
+  lootRepeatWinnerMode?: string;
   preset: SlotPresetName | "custom";
   customSlots?: string;
   groups?: ActivityGroupSeed[];
@@ -65,6 +70,11 @@ export const createEvent = async (input: {
       logoUrl: input.logoUrl,
       startsAt: input.startsAt,
       lootDurationHours: input.lootDurationHours,
+      resourceLootPolicy: input.resourceLootPolicy ?? "ANY",
+      resourceInstructions: input.resourceInstructions,
+      lootInstructions: input.lootInstructions,
+      lootAwardMethod: input.lootAwardMethod ?? "FULL_QUANTITY",
+      lootRepeatWinnerMode: input.lootRepeatWinnerMode ?? "DIFFERENT_WINNERS",
       raffles: {
         create: {
           channelId: input.channelId,

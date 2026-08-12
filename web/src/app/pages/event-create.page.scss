@@ -65,6 +65,14 @@ ion-content {
 .danger-text { color: #b42318; }
 .empty-builder { border: 1px dashed #cbd5e1; border-radius: 8px; padding: 14px; }
 .create-actions { margin-top: 20px; }
+.loot-settings { border-top: 1px solid #cbd5e1; margin-top: 8px; padding-top: 14px; }
+.loot-settings h2 { font-size: 18px; margin: 0; }
+.loot-settings .builder-heading { margin-bottom: 6px; padding-bottom: 6px; }
+.loot-settings > .create-form-grid { gap: 12px 16px; }
+.crew-settings-intro { border-top: 2px solid #94a3b8; display: grid; gap: 12px; margin-top: 10px; padding-top: 18px; }
+.crew-settings-intro h2 { font-size: 20px; margin: 0; }
+.crew-settings-intro p { margin: 4px 0 0; }
+.crew-settings-intro .toggle-field { background: #f8fafc; border-radius: 7px; padding: 10px 12px; }
 
 .sequence-list { display: grid; gap: 7px; margin-bottom: 18px; }
 .sequence-list div { align-items: center; background: rgba(255,255,255,.08); border-radius: 5px; display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; }

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Muster Command logo</title>
+  <desc id="desc">A geometric command formation emblem above a centered two-line Muster Command wordmark.</desc>
+
+  <defs>
+    <style>
+      .wordmark {
+        fill: #171b1c;
+        font-family: "Arial Narrow", "Roboto Condensed", "DIN Condensed", sans-serif;
+        font-size: 112px;
+        font-stretch: condensed;
+        font-weight: 800;
+        letter-spacing: 12px;
+        text-anchor: middle;
+      }
+    </style>
+  </defs>
+
+  <!-- Hexagonal command shield -->
+  <path d="M500 64 745 206v284L500 632 255 490V206Z"
+        fill="none" stroke="#171b1c" stroke-width="34" stroke-linejoin="miter"/>
+
+  <!-- Formation pillars -->
+  <path d="M310 436V324l62-48v196Z" fill="#171b1c"/>
+  <path d="M397 472V258l62-48v298Z" fill="#171b1c"/>
+  <path d="M541 508V210l62 48v214Z" fill="#171b1c"/>
+  <path d="M628 472V276l62 48v112Z" fill="#171b1c"/>
+
+  <!-- Central standard -->
+  <circle cx="500" cy="192" r="34" fill="#ad8740"/>
+  <path d="M472 246 500 268l28-22v278l-28-18-28 18Z" fill="#ad8740"/>
+
+  <!-- Rally chevron -->
+  <path d="M316 512 500 610l184-98-58-42-126 68-126-68Z" fill="#991f1f"/>
+
+  <!-- Precisely centered wordmark -->
+  <text class="wordmark" x="500" y="782">MUSTER</text>
+  <text class="wordmark" x="500" y="910">COMMAND</text>
+</svg>

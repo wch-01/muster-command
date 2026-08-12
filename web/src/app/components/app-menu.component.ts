@@ -33,6 +33,7 @@ export class AppMenuComponent implements OnInit {
   botInviteUrl = "/bot-invite";
   selectedGuildId = "";
   state: WebSession["state"] = "production";
+  isDarkMode = false;
 
   constructor(private readonly api: ApiService) {}
 
@@ -46,6 +47,7 @@ export class AppMenuComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.isDarkMode = document.documentElement.dataset["theme"] === "dark";
     if (window.__STARBOT_SESSION__) {
       this.applySession(window.__STARBOT_SESSION__);
     }
@@ -54,6 +56,13 @@ export class AppMenuComponent implements OnInit {
       window.__STARBOT_SESSION__ = session;
       this.applySession(session);
     });
+  }
+
+  toggleTheme() {
+    this.isDarkMode = !this.isDarkMode;
+    const theme = this.isDarkMode ? "dark" : "light";
+    document.documentElement.dataset["theme"] = theme;
+    localStorage.setItem("muster-theme", theme);
   }
 
   private applySession(session: WebSession) {

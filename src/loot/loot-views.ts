@@ -5,21 +5,36 @@ import {
   EmbedBuilder,
   type APIEmbedField,
 } from "discord.js";
-import type { LootBid, LootItem, LootRaffle } from "@prisma/client";
+import type { Event, LootAward, LootBid, LootItem, LootRaffle } from "@prisma/client";
 import { lootBidId } from "../custom-ids.js";
+import { lootItemSummary } from "./loot-rules.js";
 
 type RaffleWithItems = LootRaffle & {
-  items: Array<LootItem & { bids: LootBid[] }>;
+  event: Event;
+  items: Array<LootItem & { bids: LootBid[]; awards: LootAward[] }>;
+};
+
+const awardText = (item: RaffleWithItems["items"][number]) => {
+  if (!item.awards.length) return "No eligible bids.";
+  const totals = new Map<string, { tag: string; quantity: number }>();
+  for (const award of item.awards) {
+    const current = totals.get(award.discordUserId);
+    totals.set(award.discordUserId, { tag: award.discordTag, quantity: (current?.quantity ?? 0) + award.quantity });
+  }
+  return [...totals.values()].map((award) => `${award.tag}: ${award.quantity}`).join("\n");
+};
+
+const policyLabels: Record<string, string> = {
+  ANY: "Any form", REFINED_ONLY: "Refined materials only", RAW_ONLY: "Raw resources only",
+  NONE: "No resources", CUSTOM: "Custom rules",
 };
 
 export const lootEmbed = (raffle: RaffleWithItems) => {
   const fields: APIEmbedField[] = raffle.items.map((item) => ({
-    name: item.name,
+    name: lootItemSummary(item as never, raffle.event.lootAwardMethod, raffle.event.lootRepeatWinnerMode).slice(0, 256),
     value:
       raffle.status === "DRAWN"
-        ? item.winnerTag
-          ? `Winner: ${item.winnerTag}`
-          : "No eligible bids."
+        ? awardText(item)
         : `Bids: ${item.bids.length}`,
     inline: true,
   }));
@@ -29,6 +44,9 @@ export const lootEmbed = (raffle: RaffleWithItems) => {
     .setDescription(
       [
         `Event ID: \`${raffle.eventId}\``,
+        `Resource loot rules: **${policyLabels[raffle.event.resourceLootPolicy] ?? "Any form"}**`,
+        raffle.event.resourceInstructions ? `Resource instructions: ${raffle.event.resourceInstructions}` : null,
+        raffle.event.lootInstructions ? `Loot instructions: ${raffle.event.lootInstructions}` : null,
         raffle.status === "OPEN" && raffle.endsAt
           ? `Bids close: <t:${Math.floor(raffle.endsAt.getTime() / 1000)}:R>`
           : null,
@@ -69,8 +87,8 @@ export const lootReportEmbed = (raffle: RaffleWithItems) => {
     .setColor(0xf59e0b)
     .addFields(
       raffle.items.map((item) => ({
-        name: item.name,
-        value: item.winnerTag ? `Winner: ${item.winnerTag}` : "No eligible bids.",
+        name: lootItemSummary(item as never, raffle.event.lootAwardMethod, raffle.event.lootRepeatWinnerMode).slice(0, 256),
+        value: awardText(item),
         inline: true,
       })),
     )

@@ -39,11 +39,59 @@
             <span class="field-label">Description</span>
             <textarea rows="4" [(ngModel)]="form.description"></textarea>
           </label>
-          <label class="toggle-field form-span-two">
-            <input type="checkbox" [(ngModel)]="allowExtraCrew" />
-            <span>Allow Extra Crew</span>
-            <input *ngIf="allowExtraCrew" class="capacity-input" type="number" min="1" max="25" [(ngModel)]="extraCrewCapacity" aria-label="Extra crew capacity" />
-          </label>
+          <section class="loot-settings form-span-two">
+            <div class="builder-heading">
+              <div>
+                <h2>Resource loot rules</h2>
+                <p class="muted">Controls which resources participants should add to the loot pool. This does not affect equipment or other loot.</p>
+              </div>
+            </div>
+            <div class="create-form-grid">
+              <label class="form-field">
+                <span class="field-label">Accepted resource forms</span>
+                <select [(ngModel)]="form.resourceLootPolicy">
+                  <option value="ANY">Any form</option>
+                  <option value="REFINED_ONLY">Refined materials only</option>
+                  <option value="RAW_ONLY">Raw resources only</option>
+                  <option value="NONE">No resources</option>
+                  <option value="CUSTOM">Custom rules</option>
+                </select>
+              </label>
+              <label class="form-field" *ngIf="form.resourceLootPolicy === 'CUSTOM'">
+                <span class="field-label">Resource instructions</span>
+                <textarea rows="3" [(ngModel)]="form.resourceInstructions" placeholder="Describe accepted forms, packaging, quality requirements, or who may claim them."></textarea>
+              </label>
+              <label class="form-field form-span-two">
+                <span class="field-label">Loot instructions</span>
+                <textarea rows="3" [(ngModel)]="form.lootInstructions" placeholder="Eligibility, priority, distribution, or other organizer guidance"></textarea>
+              </label>
+              <label class="form-field">
+                <span class="field-label">How should quantities be awarded?</span>
+                <select [(ngModel)]="form.lootAwardMethod">
+                  <option value="FULL_QUANTITY">One winner receives the full quantity</option>
+                  <option value="INDIVIDUAL_UNITS">Draw each unit separately</option>
+                </select>
+              </label>
+              <label class="form-field" *ngIf="form.lootAwardMethod === 'INDIVIDUAL_UNITS'">
+                <span class="field-label">Can one participant win multiple units?</span>
+                <select [(ngModel)]="form.lootRepeatWinnerMode">
+                  <option value="DIFFERENT_WINNERS">No, use different bidders when possible</option>
+                  <option value="ALLOW_REPEATS">Yes, each unit is an independent draw</option>
+                </select>
+              </label>
+            </div>
+          </section>
+          <section class="crew-settings-intro form-span-two">
+            <div>
+              <h2>Crew settings</h2>
+              <p class="muted">Configure extra capacity, fleets, ships, ground teams, and their player roles.</p>
+            </div>
+            <label class="toggle-field">
+              <input type="checkbox" [(ngModel)]="allowExtraCrew" />
+              <span>Allow Extra Crew</span>
+              <input *ngIf="allowExtraCrew" class="capacity-input" type="number" min="1" max="25" [(ngModel)]="extraCrewCapacity" aria-label="Extra crew capacity" />
+            </label>
+          </section>
         </section>
 
         <section class="crew-builder">
@@ -135,7 +183,7 @@
           <div class="builder-heading">
             <div>
               <h2>Ground Teams</h2>
-              <p class="muted">Ground-team roles belong directly to the team.</p>
+              <p class="muted">Each ground team contains one or more roles for players to fill.</p>
             </div>
           </div>
 

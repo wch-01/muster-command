@@ -94,7 +94,7 @@ const lootCommand = new SlashCommandBuilder()
       .addStringOption((option) =>
         option
           .setName("items")
-          .setDescription("Comma-separated loot items to add.")
+          .setDescription("Names separated by commas, or category|name|quantity|quality|unit.")
           .setRequired(true)
           .setMaxLength(800),
       ),

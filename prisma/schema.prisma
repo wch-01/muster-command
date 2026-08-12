@@ -31,6 +31,11 @@ model Event {
   startsAt        DateTime?
   endedAt         DateTime?
   lootDurationHours Int           @default(24)
+  resourceLootPolicy String       @default("ANY")
+  resourceInstructions String?
+  lootInstructions String?
+  lootAwardMethod String          @default("FULL_QUANTITY")
+  lootRepeatWinnerMode String     @default("DIFFERENT_WINNERS")
   status          EventStatus      @default(OPEN)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -49,6 +54,12 @@ model EventTemplate {
   createdByName String
   name          String
   description   String?
+  lootDurationHours Int             @default(24)
+  resourceLootPolicy String         @default("ANY")
+  resourceInstructions String?
+  lootInstructions String?
+  lootAwardMethod String            @default("FULL_QUANTITY")
+  lootRepeatWinnerMode String       @default("DIFFERENT_WINNERS")
   isDefault     Boolean             @default(false)
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
@@ -157,6 +168,7 @@ model LootRaffle {
   name        String
   endsAt      DateTime?
   status      RaffleStatus @default(OPEN)
+  automaticDrawEnabled Boolean @default(true)
   createdById String
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -171,16 +183,31 @@ model LootItem {
   eventId        String
   lootRaffleId   String
   name           String
+  category       String    @default("OTHER")
+  quantity       Int       @default(1)
+  quality        Int?
+  unit           String?
   addedById      String
   addedByName    String
-  winnerUserId   String?
-  winnerTag      String?
   sortOrder      Int
   raffle         LootRaffle @relation(fields: [lootRaffleId], references: [id], onDelete: Cascade)
   bids           LootBid[]
+  awards         LootAward[]
 
   @@index([eventId])
   @@index([lootRaffleId, sortOrder])
+}
+
+model LootAward {
+  id            String   @id @default(uuid())
+  lootItemId    String
+  discordUserId String
+  discordTag    String
+  quantity      Int
+  createdAt     DateTime @default(now())
+  item          LootItem @relation(fields: [lootItemId], references: [id], onDelete: Cascade)
+
+  @@index([lootItemId])
 }
 
 model LootBid {

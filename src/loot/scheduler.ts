@@ -7,6 +7,7 @@ export const startLootScheduler = (client: Client<true>) => {
     const due = await prisma.lootRaffle.findMany({
       where: {
         status: "OPEN",
+        automaticDrawEnabled: true,
         endsAt: { lte: new Date() },
       },
       select: { id: true },

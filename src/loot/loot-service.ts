@@ -2,12 +2,17 @@ import type { Client, MessageCreateOptions, TextBasedChannel } from "discord.js"
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { lootComponents, lootEmbed, lootReportEmbed } from "./loot-views.js";
+import { drawItemAwards, normalizeLootItem, type LootItemInput } from "./loot-rules.js";
 
 export const lootInclude = {
+  event: true,
   items: {
     orderBy: { sortOrder: "asc" },
     include: {
       bids: {
+        orderBy: { createdAt: "asc" },
+      },
+      awards: {
         orderBy: { createdAt: "asc" },
       },
     },
@@ -33,7 +38,7 @@ export const getRaffleByEventId = (eventId: string) => {
 
 export const addLootItems = async (
   eventId: string,
-  items: string[],
+  items: LootItemInput[],
   addedBy: { id: string; name: string },
 ) => {
   return prisma.$transaction(async (tx) => {
@@ -52,17 +57,17 @@ export const addLootItems = async (
     }
 
     const availableSlots = Math.max(25 - raffle.items.length, 0);
-    const itemsToAdd = items.slice(0, availableSlots);
+    const itemsToAdd = items.map(normalizeLootItem).slice(0, availableSlots);
 
     if (!itemsToAdd.length) {
       throw new Error("That loot pool already has the maximum 25 items.");
     }
 
     await tx.lootItem.createMany({
-      data: itemsToAdd.map((name, index) => ({
+      data: itemsToAdd.map((item, index) => ({
         eventId,
         lootRaffleId: raffle.id,
-        name,
+        ...item,
         addedById: addedBy.id,
         addedByName: addedBy.name,
         sortOrder: raffle.items.length + index,
@@ -75,6 +80,19 @@ export const addLootItems = async (
       include: lootInclude,
     });
   });
+};
+
+export const updateLootItem = async (itemId: string, userId: string, input: LootItemInput) => {
+  const item = await prisma.lootItem.findUnique({
+    where: { id: itemId },
+    include: { raffle: { include: { event: true } } },
+  });
+  if (!item) throw new Error("Loot item not found.");
+  if (item.raffle.status !== "OPEN") throw new Error("Loot items cannot be edited after the pool is drawn.");
+  if (item.addedById !== userId && item.raffle.event.createdById !== userId) {
+    throw new Error("Only the item creator or event owner can edit this loot item.");
+  }
+  return prisma.lootItem.update({ where: { id: item.id }, data: normalizeLootItem(input) });
 };
 
 export const drawRaffle = async (lootId: string) => {
@@ -93,19 +111,25 @@ export const drawRaffle = async (lootId: string) => {
         continue;
       }
 
-      const winner = item.bids[Math.floor(Math.random() * item.bids.length)];
-      await tx.lootItem.update({
-        where: { id: item.id },
-        data: {
-          winnerUserId: winner.discordUserId,
-          winnerTag: winner.discordTag,
-        },
+      const awards = drawItemAwards(
+        item as LootItemInput,
+        item.bids,
+        raffle.event.lootAwardMethod,
+        raffle.event.lootRepeatWinnerMode,
+      );
+      await tx.lootAward.createMany({
+        data: awards.map((award) => ({
+          lootItemId: item.id,
+          discordUserId: award.discordUserId,
+          discordTag: award.discordTag,
+          quantity: award.quantity,
+        })),
       });
     }
 
     return tx.lootRaffle.update({
       where: { id: lootId },
-      data: { status: "DRAWN" },
+      data: { status: "DRAWN", automaticDrawEnabled: false, endsAt: null },
       include: lootInclude,
     });
   });

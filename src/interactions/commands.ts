@@ -16,6 +16,7 @@ import {
   publishRaffleUpdate,
 } from "../loot/loot-service.js";
 import { lootComponents, lootEmbed, lootReportEmbed } from "../loot/loot-views.js";
+import { parseDiscordLootItems } from "../loot/loot-rules.js";
 import type { SlotPresetName } from "../slot-presets.js";
 
 const parseStartDate = (input: string | null) => {
@@ -168,6 +169,11 @@ const handleLootCommand = async (interaction: ChatInputCommandInteraction) => {
       await interaction.editReply("Only the event owner can draw this loot pool.");
       return;
     }
+    const existingRaffle = await getRaffleByEventId(eventId);
+    if (existingRaffle?.status === "DRAWN") {
+      await interaction.editReply("This loot pool has already been drawn.");
+      return;
+    }
     const raffle = await drawRaffleByEventId(eventId);
     if (!raffle) {
       await interaction.editReply("I could not find a loot pool for that event ID.");
@@ -186,11 +192,13 @@ const handleLootCommand = async (interaction: ChatInputCommandInteraction) => {
     await interaction.deferReply({ ephemeral: true });
 
     const eventId = interaction.options.getString("event_id", true);
-    const items = interaction.options
-      .getString("items", true)
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+    let items;
+    try {
+      items = parseDiscordLootItems(interaction.options.getString("items", true));
+    } catch (error) {
+      await interaction.editReply(error instanceof Error ? error.message : "I could not read those loot items.");
+      return;
+    }
 
     if (!items.length) {
       await interaction.editReply("Add at least one loot item.");
@@ -218,7 +226,7 @@ const handleLootCommand = async (interaction: ChatInputCommandInteraction) => {
       return;
     }
 
-    await publishRaffleReplacement(interaction.client, raffle, items);
+    await publishRaffleReplacement(interaction.client, raffle, items.map((item) => item.name));
     await interaction.editReply(`Updated \`${raffle.name}\` with the added loot items.`);
     return;
   }

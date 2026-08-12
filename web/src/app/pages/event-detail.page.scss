@@ -247,6 +247,57 @@ ion-content {
   padding: 16px;
 }
 
+:host-context(html[data-theme="dark"]) {
+  .event-hero,
+  .event-controls,
+  .loot-modal,
+  .loot-item,
+  .activity-accordion {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .event-controls h1,
+  .event-hero > p,
+  .activity-column h2 {
+    color: #f3f4f6;
+  }
+
+  .event-meta,
+  .accordion-title small,
+  .accordion-summary,
+  .ship-toggle > span:last-child {
+    color: #9ca3af;
+  }
+
+  .accordion-toggle,
+  .ship-toggle {
+    color: #f3f4f6;
+  }
+
+  .accordion-toggle {
+    background: #273449;
+  }
+
+  .accordion-toggle:hover,
+  .accordion-toggle:focus-visible,
+  .ship-toggle:hover,
+  .ship-toggle:focus-visible {
+    background: #334155;
+  }
+
+  .accordion-content,
+  .ship-accordion {
+    border-color: #4b5563;
+  }
+
+  .timing-note {
+    background: #273449;
+    color: #cbd5e1;
+  }
+}
+
 .extra-panel > header {
   align-items: flex-start;
   display: flex;
@@ -312,14 +363,25 @@ ion-content {
 }
 
 .loot-add {
-  align-items: end;
+  display: block;
   margin: 16px 0;
 }
 
-.loot-add ion-input {
-  flex: 1;
-  min-width: 240px;
+.loot-guidance {
+  background: #eef6ff;
+  border-left: 4px solid #2563eb;
+  margin-top: 12px;
+  padding: 10px 12px;
 }
+
+.loot-guidance p { margin: 5px 0 0; }
+.loot-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.loot-form-grid label { display: grid; gap: 5px; color: #334155; font-size: 13px; font-weight: 700; }
+.loot-form-grid input, .loot-form-grid select { background: #fff; border: 1px solid #aebdd0; border-radius: 6px; min-height: 40px; padding: 8px 10px; }
+.loot-form-grid em { color: #64748b; font-size: 12px; font-style: normal; font-weight: 400; }
+.loot-form-grid .warning-field input { border: 2px solid #dc2626; }
+.loot-form-grid small, .warning-text { color: #b42318; }
+.loot-form-actions { align-items: center; display: flex; gap: 8px; margin-top: 10px; }
 
 .loot-access-message {
   color: #92400e;
@@ -397,4 +459,6 @@ ion-content {
   .loot-modal {
     max-height: 92vh;
   }
+
+  .loot-form-grid { grid-template-columns: 1fr; }
 }
