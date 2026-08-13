@@ -12,6 +12,7 @@ coverage/
 .env
 .env.*
 !.env.example
+pi-deployment.env
 .idea/
 .vscode/
 

@@ -141,6 +141,10 @@ export const handleButton = async (interaction: ButtonInteraction) => {
 
     await interaction.reply({ content: "That button is not recognized.", ephemeral: true });
   } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === 40060) {
+      console.warn("Another bot instance already acknowledged this button interaction.");
+      return;
+    }
     const message = error instanceof Error ? error.message : "That button could not be handled.";
     await interaction.reply({ content: message, ephemeral: true });
   }

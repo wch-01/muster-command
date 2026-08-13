@@ -4,7 +4,7 @@ import { ApiService, type WebSession } from "../services/api.service";
 
 declare global {
   interface Window {
-    __STARBOT_SESSION__?: WebSession;
+    __MUSTER_SESSION__?: WebSession;
   }
 }
 
@@ -48,12 +48,12 @@ export class AppMenuComponent implements OnInit {
 
   ngOnInit() {
     this.isDarkMode = document.documentElement.dataset["theme"] === "dark";
-    if (window.__STARBOT_SESSION__) {
-      this.applySession(window.__STARBOT_SESSION__);
+    if (window.__MUSTER_SESSION__) {
+      this.applySession(window.__MUSTER_SESSION__);
     }
 
     this.api.getSession().subscribe((session) => {
-      window.__STARBOT_SESSION__ = session;
+      window.__MUSTER_SESSION__ = session;
       this.applySession(session);
     });
   }
@@ -82,11 +82,6 @@ export class AppMenuComponent implements OnInit {
 
   changeActiveServer(event: Event) {
     const value = (event.target as HTMLSelectElement).value;
-    if (value === "__invite") {
-      window.location.href = this.botInviteUrl;
-      return;
-    }
-
     if (!value || value === this.activeServer?.id) {
       this.selectedGuildId = this.activeServer?.id ?? "";
       return;

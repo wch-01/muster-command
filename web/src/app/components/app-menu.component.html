@@ -2,7 +2,7 @@
   <a class="brand" href="/app/dashboard" aria-label="Muster Command dashboard">
     <img
       class="brand-logo"
-      src="assets/branding/muster-command-logo.svg"
+      src="assets/branding/muster-command-logo.svg?v=2"
       alt="Muster Command"
     />
   </a>
@@ -27,16 +27,17 @@
         <option *ngIf="!servers.length" value="" disabled>No shared server</option>
         <option *ngIf="activeServer" [value]="activeServer.id" selected>{{ activeServer.name }}</option>
         <option *ngFor="let server of otherServers" [value]="server.id">{{ server.name }}</option>
-        <option value="" disabled>--------</option>
-        <option value="__invite">+ Add bot to another server</option>
       </select>
     </div>
-    <span *ngIf="userName">{{ userName }}</span>
+    <a class="add-server-button" [href]="botInviteUrl" target="_blank" rel="noopener noreferrer">+ Add to Server</a>
     <button class="theme-toggle" type="button" (click)="toggleTheme()"
       [attr.aria-label]="isDarkMode ? 'Use light mode' : 'Use dark mode'"
       [attr.title]="isDarkMode ? 'Use light mode' : 'Use dark mode'">
       <span aria-hidden="true">{{ isDarkMode ? "☀" : "☾" }}</span>
     </button>
-    <a href="/logout">Log out</a>
+    <div class="account-menu">
+      <span *ngIf="userName">{{ userName }}</span>
+      <a class="logout-button" href="/logout">Log out</a>
+    </div>
   </div>
 </header>

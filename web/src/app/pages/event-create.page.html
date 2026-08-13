@@ -12,11 +12,9 @@
             <span class="field-label">Event name</span>
             <input type="text" [(ngModel)]="form.name" required />
           </label>
-          <label class="form-field">
-            <span class="field-label">Start time</span>
-            <input type="datetime-local" [(ngModel)]="form.startsAt" />
-            <small>Timezone: {{ timeZoneLabel }}</small>
-          </label>
+          <div class="form-field">
+            <mc-local-date-time-input [(ngModel)]="form.startsAt" />
+          </div>
           <label class="form-field">
             <span class="field-label">Event template</span>
             <select [(ngModel)]="form.preset" (change)="presetChanged()">
@@ -125,10 +123,10 @@
                   <option value="AS_DIRECTED">As directed</option>
                 </select>
               </label>
-              <label class="form-field" *ngIf="fleet.scheduleMode === 'SPECIFIC_TIME'">
+              <div class="form-field" *ngIf="fleet.scheduleMode === 'SPECIFIC_TIME'">
                 <span class="field-label">Fleet start time</span>
-                <input type="datetime-local" [(ngModel)]="fleet.startsAt" />
-              </label>
+                <mc-local-date-time-input [(ngModel)]="fleet.startsAt" />
+              </div>
               <label class="form-field" *ngIf="fleet.scheduleMode === 'AFTER_GROUP'">
                 <span class="field-label">Starts after</span>
                 <select [(ngModel)]="fleet.predecessorClientId">
@@ -203,7 +201,7 @@
                   <option value="AS_DIRECTED">As directed</option>
                 </select>
               </label>
-              <label class="form-field" *ngIf="team.scheduleMode === 'SPECIFIC_TIME'"><span class="field-label">Team start time</span><input type="datetime-local" [(ngModel)]="team.startsAt" /></label>
+              <div class="form-field" *ngIf="team.scheduleMode === 'SPECIFIC_TIME'"><span class="field-label">Team start time</span><mc-local-date-time-input [(ngModel)]="team.startsAt" /></div>
               <label class="form-field" *ngIf="team.scheduleMode === 'AFTER_GROUP'">
                 <span class="field-label">Starts after</span>
                 <select [(ngModel)]="team.predecessorClientId"><option value="">Select a fleet or ground team</option><option *ngFor="let group of predecessorChoices(team)" [value]="group.clientId">{{ group.name }}</option></select>
@@ -232,7 +230,7 @@
 
     <section class="discord-preview" aria-label="Event structure preview">
       <h2>{{ form.name || "New Star Citizen Event" }}</h2>
-      <p *ngIf="form.startsAt">Starts: {{ form.startsAt | date: "medium" }} · {{ timeZoneLabel }}</p>
+      <p *ngIf="form.startsAt" [title]="'All times are shown in 24-hour format and in your local timezone (' + timeZoneLabel + ').'">Starts: {{ form.startsAt | dateTime24 }} (local time)</p>
       <p *ngIf="form.description">{{ form.description }}</p>
       <h3>Operation sequence</h3>
       <div class="sequence-list"><div *ngFor="let group of allActivityGroups()"><strong>{{ group.name }}</strong><span>{{ scheduleDescription(group) }}</span></div></div>

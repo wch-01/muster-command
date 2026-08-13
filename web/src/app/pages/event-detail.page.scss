@@ -27,6 +27,25 @@ ion-content {
   padding: 16px;
 }
 
+.event-logo {
+  display: block;
+  max-height: 320px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.event-logo-fallback {
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px dashed #94a3b8;
+  border-radius: 8px;
+  color: #475569;
+  display: flex;
+  justify-content: center;
+  min-height: 120px;
+  padding: 16px;
+}
+
 .event-controls,
 .loot-header,
 .loot-add {
@@ -273,23 +292,36 @@ ion-content {
 
   .accordion-toggle,
   .ship-toggle {
+    background: transparent;
     color: #f3f4f6;
   }
 
-  .accordion-toggle {
-    background: #273449;
+  .accordion-toggle:hover,
+  .accordion-toggle:focus-visible {
+    background: #334155;
   }
 
-  .accordion-toggle:hover,
-  .accordion-toggle:focus-visible,
   .ship-toggle:hover,
   .ship-toggle:focus-visible {
-    background: #334155;
+    background: transparent;
+  }
+
+  .ship-toggle:hover .accordion-chevron {
+    background: #cbd5e1;
+  }
+
+  .ship-toggle:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: -2px;
   }
 
   .accordion-content,
   .ship-accordion {
     border-color: #4b5563;
+  }
+
+  .ship-accordion {
+    box-shadow: none;
   }
 
   .timing-note {

@@ -40,7 +40,7 @@
       <section class="accordion-body" *ngIf="isExpanded(event.id)">
         <header>
           <div>
-            <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}<span *ngIf="event.startsAt"> · {{ timeZoneLabel }}</span></p>
+            <p class="muted"><span *ngIf="event.startsAt" [title]="'All times are shown in 24-hour format and in your local timezone (' + timeZoneLabel + ').'">{{ event.startsAt | dateTime24 }} (local time)</span><span *ngIf="!event.startsAt">No start time</span></p>
             <p *ngIf="event.description">{{ event.description }}</p>
           </div>
         </header>

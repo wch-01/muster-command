@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { envConfig, type DiscordSettings } from "./config.js";
+import type { DiscordSettings } from "./config.js";
 
 export type AuthenticatedUser = {
   id: string;

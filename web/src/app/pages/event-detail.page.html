@@ -9,7 +9,7 @@
           &larr; {{ backLabel }}
         </ion-button>
         <h1>{{ event.name }}</h1>
-        <p class="muted">{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}<span *ngIf="event.startsAt"> · {{ timeZoneLabel }}</span></p>
+        <p class="muted"><span *ngIf="event.startsAt" [title]="'All times are shown in 24-hour format and in your local timezone (' + timeZoneLabel + ').'">{{ event.startsAt | dateTime24 }} (local time)</span><span *ngIf="!event.startsAt">No start time</span></p>
       </div>
       <div class="toolbar-actions">
         <ion-button color="secondary" (click)="lootOpen = true">Loot</ion-button>
@@ -25,7 +25,18 @@
     </section>
 
     <section class="event-hero">
-      <img *ngIf="event.logoUrl" class="event-logo" [src]="event.logoUrl" [alt]="event.name" />
+      <img
+        *ngIf="event.logoUrl && !logoLoadFailed"
+        class="event-logo"
+        [src]="event.logoUrl"
+        [alt]="event.name"
+        referrerpolicy="no-referrer"
+        decoding="async"
+        (error)="logoLoadFailed = true"
+      />
+      <div *ngIf="event.logoUrl && logoLoadFailed" class="event-logo-fallback" role="status">
+        Event image unavailable
+      </div>
       <p *ngIf="event.description">{{ event.description }}</p>
       <div class="event-meta">
         <span>Owner: {{ event.createdByName }}</span>
@@ -150,7 +161,7 @@
     <header class="loot-header">
       <div>
         <h2>Loot for {{ event.name }}</h2>
-        <p class="muted" *ngIf="raffle?.endsAt">Ends {{ raffle?.endsAt | date: "medium" }} · {{ timeZoneLabel }}</p>
+        <p class="muted" *ngIf="raffle?.endsAt" [title]="'All times are shown in 24-hour format and in your local timezone (' + timeZoneLabel + ').'">Ends {{ raffle?.endsAt | dateTime24 }} (local time)</p>
         <p class="muted" *ngIf="raffle?.status === 'OPEN' && !raffle?.endsAt">Loot timer starts when the event is ended.</p>
         <p class="muted" *ngIf="raffle?.status === 'DRAWN'">This loot pool has been drawn.</p>
       </div>

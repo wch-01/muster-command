@@ -37,6 +37,18 @@
   gap: 6px;
 }
 
+.builder-name {
+  display: grid;
+  line-height: 1.05;
+}
+
+.builder-name small {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .site-footer-builder img {
   border-radius: 3px;
   height: 26px;
@@ -77,6 +89,10 @@
 
   .site-footer a {
     color: #93c5fd;
+  }
+
+  .builder-name small {
+    color: #9ca3af;
   }
 }
 

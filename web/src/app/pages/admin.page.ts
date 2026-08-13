@@ -14,6 +14,14 @@ import { ApiService, type AdminData, type AdminSettings } from "../services/api.
   styleUrls: ["./admin.page.scss"],
 })
 export class AdminPage implements OnInit {
+  readonly commands = [
+    { id: "event.create", label: "/mc event create" },
+    { id: "event.list", label: "/mc event list" },
+    { id: "event.end", label: "/mc event end" },
+    { id: "loot.add", label: "/mc loot add" },
+    { id: "loot.show", label: "/mc loot show" },
+    { id: "loot.draw", label: "/mc loot draw" },
+  ];
   data?: AdminData;
   channels: Array<{ id: string; name: string; type: string }> = [];
   saving = false;
@@ -49,6 +57,18 @@ export class AdminPage implements OnInit {
   toggle(values: string[], id: string, checked: boolean) {
     if (checked && !values.includes(id)) values.push(id);
     if (!checked) values.splice(values.indexOf(id), 1);
+  }
+
+  tier2Has(command: string) {
+    return Boolean(this.data && (this.data.settings.tier2Capabilities.includes(command) || this.data.settings.tier3Capabilities.includes(command)));
+  }
+
+  tier2Inherited(command: string) { return Boolean(this.data?.settings.tier3Capabilities.includes(command)); }
+
+  resetCommandTiers() {
+    if (!this.data) return;
+    this.data.settings.tier2Capabilities = ["event.end", "loot.add"];
+    this.data.settings.tier3Capabilities = ["event.list", "loot.show"];
   }
 
   addManualUser() { this.data?.settings.templateControlUserIds.push(""); }

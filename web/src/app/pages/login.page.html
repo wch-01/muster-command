@@ -1,7 +1,7 @@
 <main class="login-page">
   <button class="theme-toggle login-theme-toggle" type="button" (click)="toggleTheme()" [attr.aria-label]="isDarkMode ? 'Use light mode' : 'Use dark mode'" [attr.title]="isDarkMode ? 'Use light mode' : 'Use dark mode'"><span aria-hidden="true">{{ isDarkMode ? "☀" : "☾" }}</span></button>
   <section class="login-card">
-    <img class="login-logo" src="assets/branding/muster-command-logo.svg" alt="Muster Command" />
+    <img class="login-logo" src="assets/branding/muster-command-logo.svg?v=2" alt="Muster Command — coordinate, organize, execute" />
     <div class="login-copy">
       <h1>Welcome to Muster Command</h1>
       <ng-container *ngIf="user; else signedOut">
@@ -14,9 +14,40 @@
           <a class="login-button discord" [href]="loginUrl">Continue with Discord</a>
           <p class="privacy-note">Discord is used to identify your account and the servers you share with Muster Command.</p>
         </ng-container>
-        <ng-template #notConfigured><p class="configuration-notice">Discord login is not configured yet. Add <code>APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code> to the environment file next to <code>compose.yml</code>.</p></ng-template>
+        <ng-template #notConfigured>
+          <section class="configuration-guide">
+            <h2>Setup required before login</h2>
+            <p>Muster Command cannot use Discord login until its Discord application credentials are supplied. System Admin is protected by this login, so complete these bootstrap steps on the server first.</p>
+
+            <div class="missing-settings" *ngIf="missingSettings.length">
+              <strong>Missing configuration</strong>
+              <code *ngFor="let setting of missingSettings">{{ setting }}</code>
+            </div>
+
+            <ol>
+              <li>Open the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Discord Developer Portal</a> and create or select the Muster Command application.</li>
+              <li>Copy <strong>General Information → Application ID</strong>.</li>
+              <li>Open <strong>OAuth2 → General</strong>, copy the Client Secret, and add this redirect URL:<code>{{ redirectUrl || "https://your-domain.example/auth/discord/callback" }}</code></li>
+              <li>Open <strong>Bot</strong>, create/reset and copy the bot token, and enable <strong>Server Members Intent</strong>.</li>
+              <li>Copy your own Discord user ID for the initial System Administrator. Discord Developer Mode exposes <strong>Copy User ID</strong> in your profile context menu.</li>
+              <li>Create an environment file beside <code>compose.yml</code> and add:</li>
+            </ol>
+
+            <pre>APPLICATION_ID=your_application_id
+DISCORD_CLIENT_SECRET=your_client_secret
+DISCORD_BOT_TOKEN=your_bot_token
+ADMIN_DISCORD_USER_IDS=your_discord_user_id
+STATE=production</pre>
+
+            <p>Keep the bot token and client secret private. Do not paste them into Discord or commit the environment file to Git.</p>
+            <p>Restart the deployment after saving the file:</p>
+            <pre>docker compose --env-file .env up --build -d</pre>
+            <p>Reload this page and choose <strong>Continue with Discord</strong>. After login, use System Admin to confirm the public website URL and register the <code>/mc</code> commands.</p>
+          </section>
+        </ng-template>
       </ng-template>
     </div>
   </section>
-  <p class="login-byline">A Web Craft House Games project</p>
+  <p class="login-byline">Built by Web Craft House · Games &amp; community tools</p>
+  <nav class="login-public-links" aria-label="Public information"><a href="/app/about">About</a><a href="/app/privacy">Privacy</a><a href="/app/help">Help</a></nav>
 </main>

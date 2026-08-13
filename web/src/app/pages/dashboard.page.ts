@@ -1,21 +1,23 @@
-import { CommonModule, DatePipe } from "@angular/common";
+import { CommonModule } from "@angular/common";
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
 import { IonContent } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
 import { ApiService, type DashboardServer } from "../services/api.service";
 import { browserTimeZoneLabel } from "../utils/event-time";
+import { DateTime24Pipe } from "../utils/date-time-24.pipe";
 
 @Component({
   selector: "app-dashboard-page",
   standalone: true,
-  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, SiteFooterComponent],
+  imports: [CommonModule, DateTime24Pipe, IonContent, AppMenuComponent, SiteFooterComponent],
   templateUrl: "./dashboard.page.html",
   styleUrls: ["./dashboard.page.scss"],
 })
 export class DashboardPage implements OnInit, OnDestroy {
   readonly timeZoneLabel = browserTimeZoneLabel();
   servers: DashboardServer[] = [];
+  readonly failedServerIcons = new Set<string>();
   error = "";
   botInviteUrl = "/bot-invite";
   private stream?: EventSource;
@@ -44,6 +46,7 @@ export class DashboardPage implements OnInit, OnDestroy {
     this.api.getDashboard().subscribe({
       next: (dashboard) => {
         this.servers = dashboard.servers;
+        this.failedServerIcons.clear();
         this.changeDetector.detectChanges();
       },
       error: (error) => {
@@ -51,6 +54,11 @@ export class DashboardPage implements OnInit, OnDestroy {
         this.changeDetector.detectChanges();
       },
     });
+  }
+
+  serverIconFailed(serverId: string) {
+    this.failedServerIcons.add(serverId);
+    this.changeDetector.detectChanges();
   }
 
   selectServerUrl(serverId: string, returnTo: string) {

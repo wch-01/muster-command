@@ -4,6 +4,8 @@ import { Component, OnInit } from "@angular/core";
 type LoginBootstrap = {
   configured: boolean;
   destination: string;
+  missingSettings?: string[];
+  redirectUrl?: string;
   user?: { username: string; globalName?: string };
 };
 
@@ -22,6 +24,8 @@ export class LoginPage implements OnInit {
   configured = false;
   destination = "/app/dashboard";
   user?: LoginBootstrap["user"];
+  missingSettings: string[] = [];
+  redirectUrl = "";
   isDarkMode = false;
 
   ngOnInit() {
@@ -29,6 +33,8 @@ export class LoginPage implements OnInit {
     this.configured = login?.configured ?? false;
     this.destination = login?.destination ?? "/app/dashboard";
     this.user = login?.user;
+    this.missingSettings = login?.missingSettings ?? [];
+    this.redirectUrl = login?.redirectUrl ?? "";
     this.isDarkMode = document.documentElement.dataset["theme"] === "dark";
   }
 

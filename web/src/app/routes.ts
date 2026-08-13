@@ -8,6 +8,7 @@ import { AdminPage } from "./pages/admin.page";
 import { BotCommandsPage } from "./pages/bot-commands.page";
 import { SystemAdminPage } from "./pages/system-admin.page";
 import { LoginPage } from "./pages/login.page";
+import { PublicInfoPage } from "./pages/public-info.page";
 
 export const routes: Routes = [
   { path: "", redirectTo: "dashboard", pathMatch: "full" },
@@ -21,4 +22,7 @@ export const routes: Routes = [
   { path: "admin", component: AdminPage },
   { path: "system-admin", component: SystemAdminPage },
   { path: "login", component: LoginPage },
+  { path: "about", component: PublicInfoPage, data: { page: "about" } },
+  { path: "privacy", component: PublicInfoPage, data: { page: "privacy" } },
+  { path: "help", component: PublicInfoPage, data: { page: "help" } },
 ];

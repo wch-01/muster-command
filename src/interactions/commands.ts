@@ -1,6 +1,7 @@
 import {
   ChannelType,
   EmbedBuilder,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
   type MessageCreateOptions,
 } from "discord.js";
@@ -18,6 +19,8 @@ import {
 import { lootComponents, lootEmbed, lootReportEmbed } from "../loot/loot-views.js";
 import { parseDiscordLootItems } from "../loot/loot-rules.js";
 import type { SlotPresetName } from "../slot-presets.js";
+import { loadSettings } from "../settings-store.js";
+import { commandAccessForGuild, memberCommandTier, tierAllowsCapability, type CommandCapability } from "../command-access.js";
 
 const parseStartDate = (input: string | null) => {
   if (!input) {
@@ -36,6 +39,24 @@ const displayName = (interaction: ChatInputCommandInteraction) => {
   return interaction.member && "displayName" in interaction.member
     ? interaction.member.displayName
     : interaction.user.globalName ?? interaction.user.username;
+};
+
+const websitePathForCommand = (interaction: ChatInputCommandInteraction, capability: CommandCapability) => {
+  if (capability === "event.create") return "/app/events";
+  if (capability === "event.list") return "/app/active-events";
+  const eventId = interaction.options.getString("event_id");
+  if (eventId && capability.startsWith("loot.")) return `/app/events/${encodeURIComponent(eventId)}?loot=1`;
+  if (eventId) return `/app/events/${encodeURIComponent(eventId)}`;
+  return "/app";
+};
+
+const websiteLink = (baseUrl: string | undefined, path: string) => {
+  if (!baseUrl) return undefined;
+  try {
+    return new URL(path, `${baseUrl.replace(/\/$/, "")}/`).toString();
+  } catch {
+    return undefined;
+  }
 };
 
 const sendReport = async (
@@ -134,8 +155,8 @@ const handleEventCommand = async (interaction: ChatInputCommandInteraction) => {
 
     const eventId = interaction.options.getString("event_id", true);
     const existingEvent = await prisma.event.findUnique({ where: { id: eventId } });
-    if (!existingEvent || existingEvent.createdById !== interaction.user.id) {
-      await interaction.editReply("Only the event owner can end this event.");
+    if (!existingEvent) {
+      await interaction.editReply("I could not find an event with that ID.");
       return;
     }
     const event = await endEvent(eventId);
@@ -165,8 +186,8 @@ const handleLootCommand = async (interaction: ChatInputCommandInteraction) => {
 
     const eventId = interaction.options.getString("event_id", true);
     const event = await prisma.event.findUnique({ where: { id: eventId } });
-    if (!event || event.createdById !== interaction.user.id) {
-      await interaction.editReply("Only the event owner can draw this loot pool.");
+    if (!event) {
+      await interaction.editReply("I could not find an event with that ID.");
       return;
     }
     const existingRaffle = await getRaffleByEventId(eventId);
@@ -247,12 +268,38 @@ const handleLootCommand = async (interaction: ChatInputCommandInteraction) => {
 };
 
 export const handleCommand = async (interaction: ChatInputCommandInteraction) => {
-  if (interaction.commandName === "event") {
+  if (interaction.commandName !== "mc") return;
+
+  const group = interaction.options.getSubcommandGroup(true);
+  const subcommand = interaction.options.getSubcommand(true);
+  const capability = `${group}.${subcommand}` as CommandCapability;
+  const isAdministrator = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false;
+  const memberRoles = interaction.member && "roles" in interaction.member
+    ? Array.isArray(interaction.member.roles)
+      ? interaction.member.roles
+      : [...interaction.member.roles.cache.keys()]
+    : [];
+  const settings = await loadSettings();
+  const guildAccess = commandAccessForGuild(settings.commandAccessByGuild, interaction.guildId ?? "");
+  const tier = memberCommandTier(memberRoles, guildAccess);
+
+  if (!isAdministrator && !tierAllowsCapability(tier, capability, guildAccess)) {
+    const destination = websiteLink(settings.publicAppUrl, websitePathForCommand(interaction, capability));
+    await interaction.reply({
+      content: destination
+        ? `This slash command is not available to your Discord role. Continue on the [Muster Command website](${destination}), or ask a server administrator for command access.`
+        : "This slash command is not available to your Discord role. Continue on the Muster Command website, or ask a server administrator for command access. Administrators: save the Public Website URL in System Admin to include a direct link here.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (group === "event") {
     await handleEventCommand(interaction);
     return;
   }
 
-  if (interaction.commandName === "loot") {
+  if (group === "loot") {
     await handleLootCommand(interaction);
   }
 };

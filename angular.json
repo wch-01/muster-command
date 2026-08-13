@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "web",
   "projects": {
-    "star-citizen-web": {
+    "muster-command-web": {
       "projectType": "application",
       "root": "web",
       "sourceRoot": "web/src",

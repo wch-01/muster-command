@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from "@angular/common";
+import { CommonModule } from "@angular/common";
 import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewChild } from "@angular/core";
 import { ActivatedRoute, Router } from "@angular/router";
 import { IonContent } from "@ionic/angular/standalone";
@@ -8,11 +8,12 @@ import { EventTabsComponent } from "../components/event-tabs.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
 import { type EventSummary } from "../services/api.service";
 import { browserTimeZoneLabel } from "../utils/event-time";
+import { DateTime24Pipe } from "../utils/date-time-24.pipe";
 
 @Component({
   selector: "app-event-list-page",
   standalone: true,
-  imports: [CommonModule, DatePipe, IonContent, AppMenuComponent, EventTabsComponent, SiteFooterComponent],
+  imports: [CommonModule, DateTime24Pipe, IonContent, AppMenuComponent, EventTabsComponent, SiteFooterComponent],
   templateUrl: "./event-list.page.html",
   styleUrls: ["./event-list.page.scss"],
 })
@@ -40,7 +41,7 @@ export class EventListPage implements OnInit, OnDestroy {
     this.routeSubscription = this.route.data.subscribe((data) => {
       this.mode = data["mode"] === "past" ? "past" : "active";
       this.restoreListState();
-      this.loadEvents();
+      void this.loadEvents();
       this.syncEventStream();
     });
   }
@@ -184,7 +185,9 @@ export class EventListPage implements OnInit, OnDestroy {
     }
 
     this.stream = new EventSource("/api/events/stream");
-    this.stream.addEventListener("events-changed", () => this.loadEvents());
+    this.stream.addEventListener("events-changed", () => {
+      void this.loadEvents();
+    });
   }
 
   private refreshView() {

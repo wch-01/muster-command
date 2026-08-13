@@ -1,0 +1,13 @@
+:host { display: flex; flex-direction: column; height: 100%; }
+ion-content { min-height: 0; }
+.public-menu { align-items: center; background: #fff; border-bottom: 1px solid #d7dde4; display: flex; gap: 18px; min-height: 84px; padding: 0 18px; }
+.public-menu nav { display: flex; flex: 1; gap: 5px; }
+.public-menu nav a, .login-link { border-radius: 6px; color: #334155; font-weight: 700; padding: 8px 10px; text-decoration: none; }
+.public-menu nav a.active { background: #1f6feb; color: #fff; }
+.login-link { border: 1px solid #64748b; }
+.public-page article { background: #fff; border: 1px solid #d8dee9; border-radius: 10px; line-height: 1.65; margin: 0 auto; max-width: 860px; padding: 28px; }
+.public-page h1 { margin-top: 0; }
+.public-page h2 { margin-top: 28px; }
+:host-context(html[data-theme="dark"]) .public-menu, :host-context(html[data-theme="dark"]) .public-page article { background: #1f2937; border-color: #4b5563; color: #e5e7eb; }
+:host-context(html[data-theme="dark"]) .public-menu nav a, :host-context(html[data-theme="dark"]) .login-link { color: #e5e7eb; }
+@media (max-width: 700px) { .public-menu { flex-wrap: wrap; padding: 8px 14px; } .brand-logo { height: 58px; width: 200px; } .public-menu nav { order: 3; width: 100%; } }

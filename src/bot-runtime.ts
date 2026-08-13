@@ -274,7 +274,7 @@ export const publishLootPanel = async (eventId: string) => {
 export const stopBot = async () => {
   stopScheduler?.();
   stopScheduler = undefined;
-  client?.destroy();
+  await client?.destroy();
   client = undefined;
   activeToken = undefined;
   connectedAt = undefined;
@@ -302,8 +302,9 @@ export const startBot = async (settings: DiscordSettings) => {
     stopScheduler = startLootScheduler(readyClient);
   });
 
-  nextClient.on(Events.InteractionCreate, async (interaction) => {
-    try {
+  nextClient.on(Events.InteractionCreate, (interaction) => {
+    void (async () => {
+      try {
       if (interaction.isChatInputCommand()) {
         await handleCommand(interaction);
         return;
@@ -312,18 +313,24 @@ export const startBot = async (settings: DiscordSettings) => {
       if (interaction.isButton()) {
         await handleButton(interaction);
       }
-    } catch (error) {
-      console.error(error);
+      } catch (error) {
+        console.error(error);
 
-      const content = "Something went wrong while handling that interaction.";
-      if (interaction.isRepliable()) {
-        if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({ content, ephemeral: true });
-        } else {
-          await interaction.reply({ content, ephemeral: true });
+        if (error && typeof error === "object" && "code" in error && error.code === 40060) {
+          console.warn("Another bot instance already acknowledged this Discord interaction.");
+          return;
+        }
+
+        const content = "Something went wrong while handling that interaction.";
+        if (interaction.isRepliable()) {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.followUp({ content, ephemeral: true });
+          } else {
+            await interaction.reply({ content, ephemeral: true });
+          }
         }
       }
-    }
+    })();
   });
 
   await nextClient.login(settings.discordToken);

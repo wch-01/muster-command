@@ -11,6 +11,8 @@ const savedSettingsSchema = z.object({
   threadAutoDeleteDays: z.coerce.number().int().min(1).max(30).optional(),
   templateControlUserIds: z.string().optional(),
   templateControlRoleIds: z.string().optional(),
+  commandAccessByGuild: z.string().optional(),
+  publicAppUrl: z.string().optional(),
 });
 
 const normalize = (value: string | undefined) => {
@@ -69,6 +71,8 @@ export const saveSettings = async (
       : existing.threadAutoDeleteDays ?? 7,
     templateControlUserIds: textSetting(input, existing, "templateControlUserIds"),
     templateControlRoleIds: textSetting(input, existing, "templateControlRoleIds"),
+    commandAccessByGuild: textSetting(input, existing, "commandAccessByGuild"),
+    publicAppUrl: textSetting(input, existing, "publicAppUrl"),
   };
 
   await mkdir(dirname(envConfig.SETTINGS_FILE), { recursive: true });

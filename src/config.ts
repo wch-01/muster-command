@@ -33,6 +33,8 @@ export type DiscordSettings = {
   threadAutoDeleteDays?: number;
   templateControlUserIds?: string;
   templateControlRoleIds?: string;
+  commandAccessByGuild?: string;
+  publicAppUrl?: string;
 };
 
 export const settingsFromEnv = (): DiscordSettings => ({

@@ -29,3 +29,16 @@ export const isoToLocalDateTime = (value: string | null | undefined) => {
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
+
+export const formatDateTime24 = (value: string | Date | null | undefined) => {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const datePart = new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${datePart}, ${pad(date.getHours())}${pad(date.getMinutes())}`;
+};

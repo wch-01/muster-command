@@ -38,6 +38,48 @@
         </section>
 
         <section class="settings-panel">
+          <div class="section-heading">
+            <div><h2>Discord Command Access</h2><p class="muted">Create roles and assign them to members in Discord first. Then return here to map those roles to Muster Command access tiers.</p></div>
+            <button class="mini-button" type="button" (click)="resetCommandTiers()">Reset command defaults</button>
+          </div>
+          <p class="notice-panel">In Discord, open <strong>Server Settings → Roles</strong> to create and assign roles. Higher tiers automatically include access granted by lower tiers.</p>
+          <div class="tier-grid">
+            <article class="tier-card tier-one">
+              <header><h3>Tier 1 — Administrator</h3><span>Full access</span></header>
+              <p class="muted">Every command is permanently enabled. Leave roles empty if only Discord administrators should have full access.</p>
+              <div class="tier-section"><strong>Discord roles</strong>
+                <label class="checkbox-row" *ngFor="let role of admin.permissions.roles"><input type="checkbox" [checked]="selected(admin.settings.tier1RoleIds, role.id)" (change)="toggle(admin.settings.tier1RoleIds, role.id, $any($event.target).checked)" /> {{ role.name }}</label>
+              </div>
+              <div class="tier-section"><strong>Commands</strong>
+                <label class="checkbox-row" *ngFor="let command of commands"><input type="checkbox" checked disabled /> {{ command.label }}</label>
+              </div>
+            </article>
+            <article class="tier-card">
+              <header><h3>Tier 2 — Event Operator</h3><span>Includes Tier 3</span></header>
+              <p class="muted">Default: retrieve information, maintain loot, and close existing events.</p>
+              <div class="tier-section"><strong>Discord roles</strong>
+                <label class="checkbox-row" *ngFor="let role of admin.permissions.roles"><input type="checkbox" [checked]="selected(admin.settings.tier2RoleIds, role.id)" (change)="toggle(admin.settings.tier2RoleIds, role.id, $any($event.target).checked)" /> {{ role.name }}</label>
+              </div>
+              <div class="tier-section"><strong>Commands</strong>
+                <label class="checkbox-row" *ngFor="let command of commands" [class.inherited]="tier2Inherited(command.id)"><input type="checkbox" [checked]="tier2Has(command.id)" [disabled]="tier2Inherited(command.id)" (change)="toggle(admin.settings.tier2Capabilities, command.id, $any($event.target).checked)" /> {{ command.label }} <small *ngIf="tier2Inherited(command.id)">inherited</small></label>
+              </div>
+            </article>
+            <article class="tier-card">
+              <header><h3>Tier 3 — Participant</h3><span>Basic access</span></header>
+              <p class="muted">Default: retrieve event and loot screens to join events and cast lots.</p>
+              <div class="tier-section"><strong>Discord roles</strong>
+                <label class="checkbox-row" *ngFor="let role of admin.permissions.roles"><input type="checkbox" [checked]="selected(admin.settings.tier3RoleIds, role.id)" (change)="toggle(admin.settings.tier3RoleIds, role.id, $any($event.target).checked)" /> {{ role.name }}</label>
+              </div>
+              <div class="tier-section"><strong>Commands</strong>
+                <label class="checkbox-row" *ngFor="let command of commands"><input type="checkbox" [checked]="selected(admin.settings.tier3Capabilities, command.id)" (change)="toggle(admin.settings.tier3Capabilities, command.id, $any($event.target).checked)" /> {{ command.label }}</label>
+              </div>
+            </article>
+          </div>
+          <p class="muted" *ngIf="!admin.settings.tier1RoleIds.length">No server role currently has full slash-command access. Server owners and Discord administrators retain emergency access.</p>
+          <div class="actions"><button class="mini-button primary" type="button" [disabled]="saving" (click)="save()">{{ saving ? "Saving…" : "Save Command Access" }}</button></div>
+        </section>
+
+        <section class="settings-panel">
           <h2>Template Permissions</h2>
           <p class="muted">Choose the roles and users allowed to manage event templates.</p>
           <div class="permission-grid">

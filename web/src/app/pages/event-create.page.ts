@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from "@angular/common";
+import { CommonModule } from "@angular/common";
 import { ChangeDetectorRef, Component, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
@@ -11,6 +11,7 @@ import {
 import { AppMenuComponent } from "../components/app-menu.component";
 import { EventTabsComponent } from "../components/event-tabs.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
+import { LocalDateTimeInputComponent } from "../components/local-date-time-input.component";
 import {
   ApiService,
   type ActivityGroupInput,
@@ -20,6 +21,7 @@ import {
   type ScheduleMode,
 } from "../services/api.service";
 import { browserTimeZoneLabel, isoToLocalDateTime, localDateTimeToIso } from "../utils/event-time";
+import { DateTime24Pipe } from "../utils/date-time-24.pipe";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
 
@@ -64,8 +66,9 @@ type GroundTeamGroup = ScheduleFields & {
   standalone: true,
   imports: [
     CommonModule,
-    DatePipe,
+    DateTime24Pipe,
     FormsModule,
+    LocalDateTimeInputComponent,
     AppMenuComponent,
     EventTabsComponent,
     SiteFooterComponent,

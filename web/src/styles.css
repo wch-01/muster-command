@@ -68,7 +68,7 @@ a {
   display: block;
   height: 72px;
   object-fit: contain;
-  width: 116px;
+  width: 260px;
 }
 
 .env-badge {
@@ -134,6 +134,50 @@ a {
   border-radius: 6px;
   padding: 7px 8px;
   font: inherit;
+}
+
+.add-server-button,
+.logout-button {
+  border: 1px solid #64748b !important;
+  border-radius: 6px;
+  display: inline-flex;
+  justify-content: center;
+  line-height: 1.1;
+  text-decoration: none;
+}
+
+.add-server-button {
+  background: #5865f2 !important;
+  border-color: #5865f2 !important;
+  color: #ffffff !important;
+  white-space: nowrap;
+}
+
+.account-menu {
+  align-items: stretch;
+  display: grid;
+  gap: 3px;
+  min-width: 92px;
+  text-align: center;
+}
+
+.account-menu > span {
+  font-size: 12px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-button {
+  background: #eef2f7 !important;
+  color: #334155 !important;
+  padding: 6px 10px !important;
+}
+
+html[data-theme="dark"] .logout-button {
+  background: #273449 !important;
+  color: #f3f4f6 !important;
 }
 
 .page-shell {
@@ -358,6 +402,7 @@ html[data-theme="dark"] .modal-actions,
 html[data-theme="dark"] .loot-modal,
 html[data-theme="dark"] .loot-item,
 html[data-theme="dark"] .server-card,
+html[data-theme="dark"] .empty-dashboard,
 html[data-theme="dark"] .event-card,
 html[data-theme="dark"] .event-summary,
 html[data-theme="dark"] .activity-block,
@@ -368,8 +413,6 @@ html[data-theme="dark"] .slot-row,
 html[data-theme="dark"] .ship-card,
 html[data-theme="dark"] .ship-content { background: #1f2937 !important; border-color: #4b5563 !important; color: #e5e7eb !important; }
 html[data-theme="dark"] .activity-header,
-html[data-theme="dark"] .accordion-toggle,
-html[data-theme="dark"] .ship-toggle,
 html[data-theme="dark"] .crew-settings-intro .toggle-field,
 html[data-theme="dark"] .event-tabs a:hover { background: #273449 !important; border-color: #4b5563 !important; color: #e5e7eb !important; }
 html[data-theme="dark"] .mini-button,

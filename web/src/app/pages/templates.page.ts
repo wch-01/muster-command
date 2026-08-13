@@ -4,8 +4,9 @@ import { FormsModule } from "@angular/forms";
 import { IonContent } from "@ionic/angular/standalone";
 import { AppMenuComponent } from "../components/app-menu.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
+import { LocalDateTimeInputComponent } from "../components/local-date-time-input.component";
 import { ApiService, type ActivityGroupInput, type EventTemplateSummary, type SaveTemplateInput, type ScheduleMode } from "../services/api.service";
-import { browserTimeZoneLabel, isoToLocalDateTime, localDateTimeToIso } from "../utils/event-time";
+import { isoToLocalDateTime, localDateTimeToIso } from "../utils/event-time";
 
 type CrewRole = {
   label: string;
@@ -47,7 +48,7 @@ type TemplateDraft = {
 @Component({
   selector: "app-templates-page",
   standalone: true,
-  imports: [CommonModule, FormsModule, IonContent, AppMenuComponent, SiteFooterComponent],
+  imports: [CommonModule, FormsModule, IonContent, AppMenuComponent, SiteFooterComponent, LocalDateTimeInputComponent],
   templateUrl: "./templates.page.html",
   styleUrls: ["./templates.page.scss"],
 })
@@ -58,7 +59,6 @@ export class TemplatesPage implements OnInit, OnDestroy {
   error = "";
   modalOpen = false;
   editing = false;
-  readonly timeZoneLabel = browserTimeZoneLabel();
   draft: TemplateDraft = this.emptyDraft();
   private loadTimeoutId?: number;
   private nextGroupNumber = 1;

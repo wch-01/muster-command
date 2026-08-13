@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe, Location } from "@angular/common";
+import { CommonModule, Location } from "@angular/common";
 import { ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router } from "@angular/router";
@@ -14,7 +14,8 @@ import {
 import { AppMenuComponent } from "../components/app-menu.component";
 import { SiteFooterComponent } from "../components/site-footer.component";
 import { ApiService, type EventDetails, type EventGroupSummary, type LootItem, type LootItemInput } from "../services/api.service";
-import { browserTimeZoneLabel } from "../utils/event-time";
+import { browserTimeZoneLabel, formatDateTime24 } from "../utils/event-time";
+import { DateTime24Pipe } from "../utils/date-time-24.pipe";
 
 type AssignmentGroup = "ship" | "ground" | "extra";
 
@@ -23,7 +24,7 @@ type AssignmentGroup = "ship" | "ground" | "extra";
   standalone: true,
   imports: [
     CommonModule,
-    DatePipe,
+    DateTime24Pipe,
     FormsModule,
     AppMenuComponent,
     SiteFooterComponent,
@@ -46,6 +47,7 @@ export class EventDetailPage implements OnInit, OnDestroy {
   backPath = "/active-events";
   menuActive = "active-events";
   event?: EventDetails;
+  logoLoadFailed = false;
   error = "";
   lootError = "";
   lootDraft: LootItemInput = this.emptyLootDraft();
@@ -151,6 +153,9 @@ export class EventDetailPage implements OnInit, OnDestroy {
     this.error = "";
     this.api.getEvent(this.id).subscribe({
       next: (event) => {
+        if (event.logoUrl !== this.event?.logoUrl) {
+          this.logoLoadFailed = false;
+        }
         this.event = event;
         this.changeDetector.detectChanges();
       },
@@ -232,7 +237,7 @@ export class EventDetailPage implements OnInit, OnDestroy {
   scheduleDescription(group: EventGroupSummary) {
     if (group.scheduleMode === "EVENT_START") return "At event start";
     if (group.scheduleMode === "SPECIFIC_TIME" && group.startsAt) {
-      return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(group.startsAt));
+      return formatDateTime24(group.startsAt);
     }
     if (group.scheduleMode === "AFTER_GROUP") {
       const predecessor = this.event?.groups.find((candidate) => candidate.id === group.predecessorGroupId);

@@ -10,6 +10,15 @@ input, select { background: #fff; border: 1px solid #94a3b8; border-radius: 7px;
 .checkbox-row input { min-height: auto; }
 .manual-user, .actions { align-items: center; display: flex; gap: 8px; margin-bottom: 8px; }
 .manual-user input { flex: 1; }
+.section-heading, .tier-card header { align-items: start; display: flex; gap: 12px; justify-content: space-between; }
+.tier-grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tier-card { border: 1px solid #cbd5e1; border-radius: 8px; display: grid; gap: 14px; padding: 14px; }
+.tier-card header span { color: #475569; font-size: 12px; font-weight: 700; }
+.tier-one { border-color: #7c3aed; }
+.tier-section { display: grid; gap: 7px; }
+.checkbox-row small, .inherited { color: #64748b; }
 :host-context(html[data-theme="dark"]) .settings-panel { background: #1f2937; border-color: #4b5563; color: #e5e7eb; }
+:host-context(html[data-theme="dark"]) .tier-card { border-color: #4b5563; }
 :host-context(html[data-theme="dark"]) label:not(.checkbox-row) { color: #aeb8c7; }
-@media (max-width: 760px) { .form-grid, .permission-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .tier-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .form-grid, .permission-grid { grid-template-columns: 1fr; } .section-heading { display: grid; } }

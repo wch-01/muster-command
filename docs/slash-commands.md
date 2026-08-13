@@ -4,7 +4,7 @@ Production servers need global slash commands registered by the bot owner. The a
 
 ## Event Signups
 
-### `/event create`
+### `/mc event create`
 
 Creates an event signup board with buttons.
 
@@ -31,11 +31,11 @@ Fighter:3:Air wing; Gunner:4:Capital ships; Medic:1:Ground team
 
 Members can hold one ship-side signup and one ground-side signup in the same event. Creating an event also creates its hidden loot pool.
 
-### `/event list`
+### `/mc event list`
 
 Shows open events for the server.
 
-### `/event end`
+### `/mc event end`
 
 Ends an event, posts an attendance report, and starts the loot timer.
 
@@ -45,7 +45,7 @@ Required:
 
 ## Loot Rolls
 
-### `/loot add`
+### `/mc loot add`
 
 Adds items to an event loot pool and updates the original loot-pool message.
 
@@ -56,7 +56,7 @@ Required:
 
 Only event participants can add loot items. Use this when different participants picked up loot and need to add items to the same shared pool.
 
-### `/loot draw`
+### `/mc loot draw`
 
 Draws loot winners immediately.
 
@@ -64,7 +64,7 @@ Required:
 
 - `event_id`: copied from the event signup board
 
-### `/loot show`
+### `/mc loot show`
 
 Posts a fresh current loot pool and bid panel without adding an item.
 

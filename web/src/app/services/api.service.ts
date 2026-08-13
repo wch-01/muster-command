@@ -256,6 +256,11 @@ export type AdminSettings = {
   threadAutoDeleteDays: number;
   templateControlUserIds: string[];
   templateControlRoleIds: string[];
+  tier1RoleIds: string[];
+  tier2RoleIds: string[];
+  tier3RoleIds: string[];
+  tier2Capabilities: string[];
+  tier3Capabilities: string[];
 };
 
 export type AdminData = {
@@ -273,6 +278,8 @@ export type SystemAdminData = {
   loginConfigured: boolean;
   status: { configured: boolean; connected: boolean; userTag?: string; userId?: string; guildCount: number; uptimeSeconds?: number };
   installedServers: Array<{ id: string; name: string; iconUrl?: string }>;
+  publicAppUrl: string;
+  publicAppUrlDetected: boolean;
 };
 
 @Injectable({ providedIn: "root" })
@@ -362,6 +369,7 @@ export class ApiService {
   getAdmin() { return this.http.get<AdminData>("/api/admin"); }
   saveAdmin(settings: AdminSettings) { return this.http.put<{ ok: boolean }>("/api/admin", settings); }
   getSystemAdmin() { return this.http.get<SystemAdminData>("/api/system-admin"); }
+  saveSystemAdmin(settings: { publicAppUrl: string }) { return this.http.put<{ ok: boolean }>("/api/system-admin", settings); }
   registerGuildCommands() { return this.http.post<{ message: string }>("/api/system-admin/register-guild", {}); }
   registerGlobalCommands() { return this.http.post<{ message: string }>("/api/system-admin/register-global", {}); }
   getBotCommands() { return this.http.get<{ html: string }>("/api/bot-commands"); }

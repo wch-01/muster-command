@@ -22,8 +22,15 @@
     <section class="dashboard-grid" *ngIf="servers.length">
       <article class="server-card" *ngFor="let server of servers">
         <header class="server-card-header">
-          <img *ngIf="server.iconUrl" [src]="server.iconUrl" [alt]="server.name" />
-          <div class="server-icon-fallback" *ngIf="!server.iconUrl">{{ server.name.slice(0, 1) }}</div>
+          <img
+            *ngIf="server.iconUrl && !failedServerIcons.has(server.id)"
+            [src]="server.iconUrl"
+            [alt]="server.name"
+            referrerpolicy="no-referrer"
+            decoding="async"
+            (error)="serverIconFailed(server.id)"
+          />
+          <div class="server-icon-fallback" *ngIf="!server.iconUrl || failedServerIcons.has(server.id)">{{ server.name.slice(0, 1) }}</div>
           <div>
             <h2>{{ server.name }}</h2>
             <p class="muted">{{ server.activeEventCount }} active event{{ server.activeEventCount === 1 ? "" : "s" }}</p>
@@ -33,7 +40,7 @@
         <div class="dashboard-events" *ngIf="server.activeEvents.length; else noActiveEvents">
           <a class="dashboard-event" *ngFor="let event of server.activeEvents" [href]="selectServerUrl(server.id, '/app/events/' + event.id + '?from=dashboard')">
             <strong>{{ event.name }}</strong>
-            <span>{{ event.startsAt ? (event.startsAt | date: "medium") : "No start time" }}<small *ngIf="event.startsAt"> · {{ timeZoneLabel }}</small></span>
+            <span *ngIf="event.startsAt" [title]="'All times are shown in 24-hour format and in your local timezone (' + timeZoneLabel + ').'">{{ event.startsAt | dateTime24 }}<small> (local time)</small></span><span *ngIf="!event.startsAt">No start time</span>
           </a>
           <p class="muted" *ngIf="moreCount(server)">+{{ moreCount(server) }} more active events</p>
         </div>

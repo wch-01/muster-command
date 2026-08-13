@@ -1,0 +1,40 @@
+<header class="public-menu">
+  <a class="brand" [href]="homeUrl"><img class="brand-logo" src="assets/branding/muster-command-logo.svg?v=2" alt="Muster Command" /></a>
+  <nav aria-label="Public navigation"><a href="/app/about" [class.active]="page === 'about'">About</a><a href="/app/privacy" [class.active]="page === 'privacy'">Privacy</a><a href="/app/help" [class.active]="page === 'help'">Help</a></nav>
+  <button class="theme-toggle" type="button" (click)="toggleTheme()" [attr.aria-label]="isDarkMode ? 'Use light mode' : 'Use dark mode'"><span aria-hidden="true">{{ isDarkMode ? "☀" : "☾" }}</span></button>
+  <a class="login-link" href="/app/login">Log in</a>
+</header>
+
+<ion-content><div class="site-page-frame"><main class="page-shell public-page">
+  <article *ngIf="page === 'about'">
+    <h1>About Muster Command</h1>
+    <p>Muster Command helps Discord communities organize events, fleet and ground-team assignments, attendance, and participant loot drawings from a shared website and Discord bot.</p>
+    <h2>What it provides</h2>
+    <ul><li>Structured event creation and reusable templates</li><li>Discord and website signup controls</li><li>Schedule-aware fleet and ground-team assignments</li><li>Participant-only loot pools and drawings</li><li>Per-server administration and Discord command-access tiers</li></ul>
+    <p>Muster Command is built by <strong>Web Craft House</strong> as part of its games, community tools, and interactive experiences work. It is independently operated and is not affiliated with Discord or Cloud Imperium Games.</p>
+  </article>
+
+  <article *ngIf="page === 'privacy'">
+    <h1>Privacy</h1>
+    <p>Muster Command uses Discord OAuth to identify users and determine which Discord servers they share with the bot. The application requests the <code>identify</code> and <code>guilds</code> OAuth scopes.</p>
+    <h2>Information handled</h2>
+    <ul><li>Discord user ID, username, display name, and avatar reference</li><li>Discord server IDs and names needed to select a shared server</li><li>Server nickname and role membership when needed for profiles and permissions</li><li>Event assignments, loot entries, bids, and results created through Muster Command</li></ul>
+    <h2>How it is used</h2>
+    <p>This information is used only to authenticate users, enforce server and event permissions, display participation, and operate event and loot features. Discord credentials used to run a self-hosted instance are supplied by that instance's operator.</p>
+    <h2>Storage and control</h2>
+    <p>Each deployment stores its own event data and settings. The operator of that deployment controls retention, backups, and access. Signing out removes the browser session cookie; it does not delete event history or records needed by the server community.</p>
+    <h2>Questions or removal requests</h2>
+    <p>Contact the operator of the Muster Command instance first. For this project, contact <a href="mailto:contact@webcrafthouse.com">contact@webcrafthouse.com</a>.</p>
+  </article>
+
+  <article *ngIf="page === 'help'">
+    <h1>Help and Getting Started</h1>
+    <h2>Joining an existing community</h2>
+    <ol><li>Log in with Discord.</li><li>Select a server that already has Muster Command installed.</li><li>Open Events to join an available role or view its loot pool.</li></ol>
+    <h2>Adding Muster Command to a server</h2>
+    <p>After login, use the visible <strong>Add to Server</strong> button in the header. Discord only offers servers where your account has permission to install or manage applications.</p>
+    <h2>Running your own deployment</h2>
+    <p>If the login page reports missing configuration, follow its bootstrap instructions. After login, System Admin lets the operator confirm the public website address and register Discord commands.</p>
+    <p>For further help, visit <a href="https://webcrafthouse.com/contact/" target="_blank" rel="noopener noreferrer">Web Craft House support</a>.</p>
+  </article>
+</main><app-site-footer /></div></ion-content>

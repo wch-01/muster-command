@@ -115,11 +115,10 @@
               </select>
             </label>
           </div>
-          <label class="field-label" *ngIf="fleet.scheduleMode === 'SPECIFIC_TIME'">
+          <div class="field-label" *ngIf="fleet.scheduleMode === 'SPECIFIC_TIME'">
             Fleet Start Time
-            <input type="datetime-local" [(ngModel)]="fleet.startsAt" [disabled]="!editing" />
-            <small>Timezone: {{ timeZoneLabel }}</small>
-          </label>
+            <mc-local-date-time-input [(ngModel)]="fleet.startsAt" [disabled]="!editing" />
+          </div>
           <label class="field-label" *ngIf="fleet.scheduleMode === 'AFTER_GROUP'">
             Starts After
             <select [(ngModel)]="fleet.predecessorClientId" [disabled]="!editing"><option value="">Select group</option><option *ngFor="let group of predecessorChoices(fleet)" [value]="group.clientId">{{ group.name }}</option></select>
@@ -179,11 +178,10 @@
               <input type="number" min="1" max="25" [(ngModel)]="team.crewCount" [disabled]="!editing" />
             </label>
           </div>
-          <label class="field-label" *ngIf="team.scheduleMode === 'SPECIFIC_TIME'">
+          <div class="field-label" *ngIf="team.scheduleMode === 'SPECIFIC_TIME'">
             Team Start Time
-            <input type="datetime-local" [(ngModel)]="team.startsAt" [disabled]="!editing" />
-            <small>Timezone: {{ timeZoneLabel }}</small>
-          </label>
+            <mc-local-date-time-input [(ngModel)]="team.startsAt" [disabled]="!editing" />
+          </div>
           <label class="field-label" *ngIf="team.scheduleMode === 'AFTER_GROUP'">Starts After<select [(ngModel)]="team.predecessorClientId" [disabled]="!editing"><option value="">Select group</option><option *ngFor="let group of predecessorChoices(team)" [value]="group.clientId">{{ group.name }}</option></select></label>
           <label class="field-label">
             Timing Note <span class="optional-label">optional</span>
