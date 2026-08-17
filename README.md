@@ -191,7 +191,7 @@ Then open the private System Admin page:
 http://localhost:3000/system-admin
 ```
 
-The bot service pushes the current `0.0.1` database schema on startup, launches the web app at `/app`, launches the server admin page at `/admin`, launches the owner-only System Admin page at `/system-admin`, and starts the Discord bot from environment credentials. Server settings are stored in a Docker volume named `settings-data`.
+The bot service pushes the current `1.0.0` database schema on startup, launches the web app at `/app`, launches the server admin page at `/admin`, launches the owner-only System Admin page at `/system-admin`, and starts the Discord bot from environment credentials. Server settings are stored in a Docker volume named `settings-data`.
 
 All app pages and API routes require Discord login. `/system-admin` also requires the logged-in Discord user ID to match `ADMIN_DISCORD_USER_IDS` from the environment file.
 
