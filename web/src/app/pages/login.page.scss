@@ -22,7 +22,8 @@
 .configuration-guide pre { background: #111827; border-radius: 7px; color: #e5e7eb; margin: 0; overflow-x: auto; padding: 12px; text-align: left; white-space: pre-wrap; }
 .missing-settings { align-items: center; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 7px; color: #92400e; display: flex; flex-wrap: wrap; gap: 7px; padding: 10px; }
 .missing-settings code { background: #fffbeb; border-radius: 4px; padding: 3px 6px; }
-.login-byline { color: #64748b; font-size: 13px; margin: 18px 0 0; }
+.login-byline { align-items: center; color: #64748b; display: flex; flex-direction: column; font-size: 13px; line-height: 1.25; margin: 18px 0 0; text-align: center; }
+.login-byline small { font-size: 10px; }
 .login-public-links { display: flex; gap: 14px; margin-top: 8px; }
 .login-public-links a { color: #315f9b; font-size: 13px; }
 :host-context(html[data-theme="dark"]) .login-public-links a { color: #93c5fd; }
