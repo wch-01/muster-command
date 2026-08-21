@@ -64,7 +64,9 @@ Docker and Docker Compose are recommended for self-hosting and can also provide 
 
    On PowerShell, use `Copy-Item .env.example .env`.
 
-3. Replace every `replace_*` value in `.env`, including `POSTGRES_PASSWORD` and the matching password inside `DATABASE_URL`.
+3. Replace the required Discord `replace_*` values and set `POSTGRES_PASSWORD` to a strong, unique password. When using Docker Compose, do not copy that password into `DATABASE_URL`: Compose constructs the bot container's database connection automatically from `POSTGRES_PASSWORD`. The `DATABASE_URL` entry in `.env` is for running the application directly on the host.
+
+   On the first start with a new, empty PostgreSQL volume, the database container uses `POSTGRES_PASSWORD` to initialize the `bot` database user. Changing this value later does not update the password inside an existing database. Existing installations must keep their current value unless the database user's password is migrated separately.
 
 4. Configure the Discord application as described in [Discord setup](#discord-setup).
 
@@ -141,14 +143,14 @@ Muster Command loads environment variables through `dotenv`. Keep real values in
 | `APPLICATION_ID` | Yes | Discord application/client ID. `DISCORD_CLIENT_ID` is also accepted as an alias. |
 | `DISCORD_CLIENT_SECRET` | Yes | Discord OAuth2 client secret used for website login. |
 | `ADMIN_DISCORD_USER_IDS` | Yes | Comma-separated Discord user IDs allowed to use System Admin. |
-| `DATABASE_URL` | Yes | PostgreSQL connection URL used by Prisma. |
+| `DATABASE_URL` | Direct runs | PostgreSQL connection URL used by Prisma when the application runs on the host. Docker Compose supplies it automatically. |
 | `STATE` | No | `development` or `production`; defaults to `production`. |
 | `BOT_TIMEZONE` | No | Bot timezone; defaults to `UTC`. |
 | `SETUP_HOST` | No | HTTP bind address; defaults to `0.0.0.0`. |
 | `SETUP_PORT` | No | HTTP port; defaults to `3000`. |
 | `SETTINGS_FILE` | No | Runtime server-settings file; defaults to `./data/settings.json`. |
 | `ADMIN_ALLOWED_HOSTS` | No | Comma-separated hostnames allowed to reach System Admin; defaults to local hostnames. |
-| `POSTGRES_PASSWORD` | Docker only | Password used by the included PostgreSQL service. |
+| `POSTGRES_PASSWORD` | Docker Compose | Password used to initialize the included PostgreSQL service and connect the bot container. It only initializes a new database volume. |
 | `POSTGRES_PORT` | Docker only | Host port for local PostgreSQL access; defaults to `5432`. |
 
 The application stores non-secret server settings in `SETTINGS_FILE`. Discord tokens and the OAuth client secret remain environment-only.
