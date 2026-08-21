@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 500" role="img" aria-labelledby="title desc">
+  <title id="title">Muster Command logo</title>
+  <desc id="desc">The Muster Command logo displayed on a white background.</desc>
+
+  <defs>
+    <style>
+      .wordmark {
+        fill: #171b1c;
+        font-family: "Arial Narrow", "Roboto Condensed", "DIN Condensed", sans-serif;
+        font-size: 112px;
+        font-stretch: condensed;
+        font-weight: 800;
+        letter-spacing: 12px;
+        text-anchor: middle;
+      }
+      .tagline {
+        fill: #991f1f;
+        font-family: Arial, sans-serif;
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: 6px;
+        text-anchor: middle;
+      }
+    </style>
+  </defs>
+
+  <rect width="1400" height="500" fill="#ffffff"/>
+
+  <g transform="translate(20 10) scale(.48)">
+    <path d="M500 70 850 272v404L500 878 150 676V272Z"
+          fill="none" stroke="#171b1c" stroke-width="48" stroke-linejoin="miter"/>
+    <path d="M228 600V440l89-69v281Z" fill="#171b1c"/>
+    <path d="M352 652V346l89-69v426Z" fill="#171b1c"/>
+    <path d="M559 703V277l89 69v306Z" fill="#171b1c"/>
+    <path d="M683 652V371l89 69v160Z" fill="#171b1c"/>
+    <circle cx="500" cy="251" r="49" fill="#991f1f"/>
+    <path d="M460 328 500 359l40-31v397l-40-26-40 26Z" fill="#991f1f"/>
+    <path d="M237 709 500 849l263-140-83-60-180 97-180-97Z" fill="#991f1f"/>
+  </g>
+
+  <g text-anchor="middle">
+    <text class="wordmark" x="900" y="164">MUSTER</text>
+    <text class="wordmark" x="900" y="286">COMMAND</text>
+    <text class="tagline" x="900" y="372">coordinate. organize. execute.</text>
+  </g>
+</svg>

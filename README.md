@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="web/src/assets/branding/muster-command-logo.svg" alt="Muster Command" width="560" />
+  <img src="docs/muster-command-logo-white.svg" alt="Muster Command" width="560" />
 </p>
 
 # Muster Command
