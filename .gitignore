@@ -11,10 +11,19 @@ coverage/
 # Environment and local settings
 .env
 .env.*
+*.env
+*.env.*
 !.env.example
 pi-deployment.env
+.secrets/
+secrets/
+credentials/
+*-credentials.json
+service-account*.json
 .idea/
 .vscode/
+*.swp
+*.swo
 
 # Logs
 *.log
@@ -29,3 +38,22 @@ Thumbs.db
 
 # Docker/local data
 data/
+.tmp/
+tmp/
+temp/
+
+# Keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+
+# Local marketing drafts (not part of the public repository)
+docs/main-website-writeup.md
+docs/marketing-posts.md
+docs/top-gg-marketing.md

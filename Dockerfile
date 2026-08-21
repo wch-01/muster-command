@@ -2,7 +2,7 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -15,6 +15,7 @@ COPY src ./src
 COPY web ./web
 RUN npx prisma generate
 RUN npm run build
+RUN npm prune --omit=dev
 
 FROM node:22-alpine AS runner
 WORKDIR /app
